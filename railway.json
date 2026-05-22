@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "./target/release/apt-server",
-    "restartPolicyType": "onFailure",
+    "restartPolicyType": "ON_FAILURE",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 10
   }

@@ -1,10 +1,15 @@
 name = "apt-studio"
 
 [phases.setup]
-nixPackages = ["cargo", "rustc", "gcc"]
+nixPackages = ["rustup", "gcc", "pkg-config", "openssl"]
 
 [phases.install]
-cmds = ["cargo fetch"]
+cmds = [
+  "rustup toolchain install stable --profile minimal",
+  "rustup default stable",
+  "cargo fetch",
+  "rm -f apt.db" # start with fresh DB on each deploy
+]
 
 [phases.build]
 cmds = ["cargo build --release"]
