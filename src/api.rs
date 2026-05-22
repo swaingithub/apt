@@ -929,15 +929,40 @@ async fn get_config(
 
     // Build pages map
     let mut pages_map = serde_json::Map::new();
-    for page in &pages {
-        let page_id = page["page_id"].as_str().unwrap_or("");
-        let page_db_id = page["id"].as_str().unwrap_or("");
-        let attributes = page["attributes"].clone();
-        let blocks = db.list_blocks(page_db_id).unwrap_or_default();
-        pages_map.insert(page_id.to_string(), serde_json::json!({
-            "attributes": attributes,
-            "blocks": blocks,
-        }));
+
+    if !pages.is_empty() {
+        // Normalized tables have data — use them
+        for page in &pages {
+            let page_id = page["page_id"].as_str().unwrap_or("");
+            let page_db_id = page["id"].as_str().unwrap_or("");
+            let attributes = page["attributes"].clone();
+            let blocks = db.list_blocks(page_db_id).unwrap_or_default();
+            pages_map.insert(page_id.to_string(), serde_json::json!({
+                "attributes": attributes,
+                "blocks": blocks,
+            }));
+        }
+    } else {
+        // Fall back to flat project_config JSON (legacy generate flow)
+        let project_config = project.get("config")
+            .and_then(|c| c.get("project_config"))
+            .or_else(|| project.get("project_config"));
+        if let Some(pc) = project_config {
+            if let Some(legacy_pages) = pc.get("pages").and_then(|p| p.as_array()) {
+                for page in legacy_pages {
+                    let page_id = page["id"].as_str().unwrap_or("page_unknown");
+                    let name = page["name"].as_str().unwrap_or("Page");
+                    let elements = page["elements"].clone();
+                    pages_map.insert(page_id.to_string(), serde_json::json!({
+                        "attributes": {
+                            "name": name,
+                            "icon": page.get("icon").or(Some(&serde_json::Value::Null)),
+                        },
+                        "blocks": elements,
+                    }));
+                }
+            }
+        }
     }
 
     // Build settings map
