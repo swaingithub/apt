@@ -1,0 +1,40 @@
+[package]
+name = "apt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.4"
+actix-cors = "0.6"
+actix-files = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+zip = "0.6"
+tempfile = "3.8"
+handlebars = "5.1"
+qrcode = "0.14"
+base64 = "0.21"
+chrono = { version = "0.4", features = ["serde"] }
+log = "0.4"
+env_logger = "0.10"
+anyhow = "1.0"
+thiserror = "1.0"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+mime_guess = "2.0"
+lazy_static = "1.4"
+rusqlite = { version = "0.31", features = ["bundled"] }
+jsonwebtoken = "9"
+bcrypt = "0.16"
+rand = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+regex = "1"
+
+[[bin]]
+name = "apt"
+path = "src/cli.rs"
+
+[[bin]]
+name = "apt-server"
+path = "src/main.rs"

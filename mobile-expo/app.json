@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Appmake Mobile",
+    "slug": "apt-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "apt",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.apt.mobile"
+    },
+    "android": {
+      "package": "com.apt.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#2563eb"
+      },
+      "versionCode": 4
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0d354949-406b-44d6-844e-75b93c164058"
+      }
+    },
+    "owner": "rakesh002"
+  }
+}

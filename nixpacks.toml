@@ -1,0 +1,13 @@
+name = "apt-studio"
+
+[phases.setup]
+nixPackages = ["cargo", "rustc", "gcc"]
+
+[phases.install]
+cmds = ["cargo fetch"]
+
+[phases.build]
+cmds = ["cargo build --release"]
+
+[start]
+cmd = "./target/release/apt-server"
