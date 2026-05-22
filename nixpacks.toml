@@ -1,7 +1,7 @@
 name = "apt-studio"
 
 [phases.setup]
-nixPackages = ["rustup", "gcc", "pkg-config", "openssl"]
+nixPackages = ["rustup", "gcc", "pkg-config"]
 
 [phases.install]
 cmds = [
