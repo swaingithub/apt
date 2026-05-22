@@ -7,8 +7,7 @@ nixPackages = ["rustup", "gcc", "pkg-config"]
 cmds = [
   "rustup toolchain install stable --profile minimal",
   "rustup default stable",
-  "cargo fetch",
-  "rm -f apt.db" # start with fresh DB on each deploy
+  "cargo fetch"
 ]
 
 [phases.build]
