@@ -1,188 +1,126 @@
-# AppMake Clone - Rust-Based Mobile App Generator
+# Apt — Visual No-Code React Native App Builder
 
-A powerful Rust-based backend system that generates React Native/Expo mobile applications with build capabilities for Android (.apk) and iOS (ZIP), plus Expo QR code scanning for instant preview.
-
-## Features
-
-- 🚀 Generate React Native/Expo mobile apps from web interface
-- 📦 Download source code as ZIP file
-- 🤖 Build Android APK files
-- 🍎 Build iOS ZIP packages
-- 📱 Generate Expo QR codes for instant app preview
-- 🎨 Customizable app configuration (colors, names, package IDs)
-- ⚡ Fast Rust-based backend with Actix-web
-- 🌐 Modern web frontend with responsive design
+A full-stack drag-and-drop mobile app builder. Design pages visually in your browser, publish configs to an API, and run the result live on a real device via Expo. Rust backend + React dashboard + React Native runtime.
 
 ## Architecture
 
-### Backend (Rust)
-- **Actix-web**: High-performance web framework
-- **Expo App Generator**: Creates React Native/Expo project structure
-- **Build System**: Integrates with Expo EAS for Android/iOS builds
-- **QR Code Generator**: Generates scannable QR codes for Expo Go app
-
-### Frontend (Web)
-- Modern HTML/CSS/JavaScript interface
-- Real-time app configuration
-- Download management for source code and builds
-- QR code display for Expo preview
-
-## Prerequisites
-
-- Rust 1.70 or higher
-- Node.js and npm (for Expo builds)
-- Expo CLI (`npm install -g expo-cli`)
-- EAS CLI (`npm install -g eas-cli`)
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd appmake-clone
+```
+┌─────────────────┐     ┌──────────────┐     ┌────────────────────┐
+│  Dashboard       │────▶│  Rust API    │────▶│  Mobile App        │
+│  (browser)       │     │  (port 8080) │     │  (Expo / React     │
+│  Build pages,    │     │  Serve       │     │   Native)          │
+│  add blocks,     │     │  configs     │     │  Fetches config    │
+│  publish         │     │  + static    │     │  from API on start │
+└─────────────────┘     └──────────────┘     └────────────────────┘
 ```
 
-2. Install Rust dependencies:
-```bash
-cargo build
-```
+- **Dashboard**: Two options — modern React frontend (`npm run dev`, port 5173) or the legacy HTML/JS dashboard served directly by the Rust server (port 8080)
+- **Rust API**: Actix-web server with SQLite, serves the dashboard + REST API + Config API for mobile
+- **Mobile Runtime**: Expo SDK 54 project in `mobile-expo/` — fetches published config from the server and renders pages/blocks
 
-3. Create output directories:
-```bash
-mkdir -p output temp
-```
+## Quick Start
 
-## Running the Server
-
-Start the Rust backend server:
 ```bash
+# Terminal 1 — Start the Rust server (API + legacy dashboard)
 cargo run
+# → http://localhost:8080
+
+# Terminal 2 — React dashboard (optional, modern frontend)
+npm install && npm run dev
+# → http://localhost:5173 (proxies /api to 8080)
+
+# Terminal 3 — Mobile app (after generating an app)
+cd mobile-expo
+npm install
+npx expo start
+# → Scan QR code with Expo Go on your phone
 ```
 
-The server will start on `http://localhost:8080`
+## Dashboard Features
 
-## Using the Web Interface
-
-1. Open your browser and navigate to `http://localhost:8080`
-2. Fill in the app configuration form:
-   - App Name (e.g., "MyAwesomeApp")
-   - Display Name (e.g., "My Awesome App")
-   - Package Name (e.g., "com.example.myawesomeapp")
-   - Version (e.g., "1.0.0")
-   - Primary and Secondary Colors
-   - Description and Author (optional)
-3. Click "Generate App" to create your React Native/Expo app
-4. After generation, you can:
-   - Download the source code as a ZIP file
-   - Build Android APK
-   - Build iOS ZIP
-   - Show Expo QR code for instant preview
+| Feature | Description |
+|---|---|
+| **Page Builder** | Visual block-based builder with phone-frame canvas |
+| **Block Palette** | 20+ block types: heading, text, image, button, grid, tabs, chart, map, banner, carousel, etc. |
+| **Live Preview** | Side-by-side phone preview updates in real-time |
+| **Theme Presets** | 8 color themes, custom color pickers |
+| **Publishing** | Snapshot config and serve via Config API |
+| **Phone Preview** | Full-screen simulator with navigation, state, and action handling |
+| **EAS Builds** | Trigger Android APK builds via Expo EAS |
+| **Multi-user** | Auth with JWT, per-user app isolation |
+| **Normalized Schema** | settings, pages, blocks, navigation tables with CRUD |
 
 ## API Endpoints
 
-### Health Check
+### Config API (public, used by mobile apps)
 ```
-GET /api/health
-```
-
-### Create App
-```
-POST /api/apps
-Content-Type: application/json
-
-{
-  "config": {
-    "appName": "MyApp",
-    "displayName": "My App",
-    "packageName": "com.example.myapp",
-    "version": "1.0.0",
-    "primaryColor": "#4F46E5",
-    "secondaryColor": "#ffffff",
-    "description": "My awesome app",
-    "author": "John Doe"
-  },
-  "features": []
-}
+GET /api/v1/config/{slug}
 ```
 
-### Build App
+### Auth
 ```
-POST /api/apps/{app_id}/build
-Content-Type: application/json
-
-{
-  "platform": "android"  // or "ios"
-}
+POST /api/auth/register
+POST /api/auth/login
+GET  /api/auth/me
 ```
 
-### Download Source Code
+### Apps
 ```
-GET /api/apps/{app_id}/download
-```
-
-### Download Build
-```
-GET /api/builds/{build_id}/download
-```
-
-### Get QR Code
-```
-GET /api/apps/{app_id}/qr
+GET    /api/apps
+POST   /api/apps
+GET    /api/apps/{id}
+PUT    /api/apps/{id}
+DELETE /api/apps/{id}
+POST   /api/apps/{id}/publish
+GET    /api/apps/{id}/builds
+POST   /api/apps/{id}/build
+GET    /api/apps/{id}/download
 ```
 
-## Generated App Structure
-
-The generated Expo app includes:
-- `package.json` - Dependencies and scripts
-- `app.json` - Expo configuration
-- `App.tsx` - Main application component
-- `tsconfig.json` - TypeScript configuration
-- `assets/` - App assets directory
-- `README.md` - App documentation
-- `.gitignore` - Git ignore rules
-
-## Building for Production
-
-### Android APK
-Requires:
-- Android SDK
-- Expo EAS account
-- Keystore file
-
-### iOS ZIP
-Requires:
-- macOS with Xcode
-- Apple Developer account
-- Expo EAS account
-- Certificates and provisioning profiles
-
-## Development
-
-### Project Structure
+### Normalized CRUD
 ```
-appmake-clone/
-├── src/
-│   ├── main.rs              # Server entry point
-│   ├── models.rs            # Data models
-│   ├── api.rs               # API endpoints
-│   ├── app_generator.rs     # Expo app generator
-│   ├── builder.rs           # Build system
-│   ├── qr_generator.rs      # QR code generator
-│   └── templates.rs         # Template engine
-├── static/
-│   ├── index.html           # Web frontend
-│   ├── styles.css           # Styles
-│   └── app.js               # Frontend logic
-├── output/                  # Generated files
-├── temp/                    # Temporary files
-└── Cargo.toml               # Rust dependencies
+GET/POST    /api/v1/apps/{id}/settings
+GET/PUT/DEL /api/v1/apps/{id}/settings/{setting_id}
+GET/POST    /api/v1/apps/{id}/pages
+GET/PUT/DEL /api/v1/apps/{id}/pages/{page_id}
+GET/POST    /api/v1/apps/{id}/blocks
+GET/PUT/DEL /api/v1/apps/{id}/blocks/{block_id}
+GET/POST    /api/v1/apps/{id}/navigation
+GET/PUT/DEL /api/v1/apps/{id}/navigation/{nav_id}
+GET/POST    /api/v1/apps/{id}/media
+GET         /api/v1/apps/{id}/publish
 ```
 
-## License
+## Deploy to Railway (Free)
 
-MIT License
+1. Push this repo to GitHub
+2. Go to [Railway.app](https://railway.app) → New Project → Deploy from GitHub
+3. Set environment variables:
+   - `APT_API_BASE_URL` = `https://your-app.railway.app` (your Railway domain)
+4. Railway auto-detects `Cargo.toml` and builds with `nixpacks.toml`
+5. Your dashboard + API will be live at the Railway URL
 
-## Contributing
+The generated mobile app's `config.ts` will use `APT_API_BASE_URL` to know where to fetch its published config.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-# apt
+## Project Structure
+
+```
+├── src/                  # Rust backend + React frontend (coexist)
+│   ├── main.rs           # Server entry, binds 0.0.0.0:$PORT
+│   ├── api.rs            # API endpoints + ConfigCache
+│   ├── db.rs             # SQLite schema + CRUD
+│   ├── models.rs         # Data types
+│   ├── app_generator.rs  # Expo project generator
+│   ├── builder.rs        # EAS build handling
+│   ├── auth.rs           # JWT auth
+│   └── ...tsx            # React frontend components
+├── static/               # Legacy HTML/JS dashboard
+├── dist/                 # Built React frontend (auto-generated)
+├── mobile-expo/          # React Native runtime (SDK 54)
+│   ├── App.tsx           # Entry — loads config from server
+│   └── src/apt/          # Framework: renderer, FilterSystem,
+│                          #   BlockRegistry, ActionHandler, etc.
+├── nixpacks.toml         # Railway build config
+├── Procfile              # Railway start command
+└── railway.json          # Railway project settings
+```
