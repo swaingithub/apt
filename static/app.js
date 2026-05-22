@@ -71,6 +71,7 @@ function switchView(name) {
     const headers = {
         apps: { title: 'My Apps', subtitle: 'Your React Native apps, generated and ready to build' },
         create: { title: document.getElementById('editAppId').value ? 'Edit App' : 'New App', subtitle: document.getElementById('editAppId').value ? 'Modify your app configuration' : 'Describe your app idea — we\'ll write the React Native code' },
+        builder: { title: 'App Builder', subtitle: 'Visually edit your app pages and blocks' },
         builds: { title: 'Build History', subtitle: 'Track your EAS cloud builds' },
     };
     const h = headers[name] || headers.apps;
@@ -101,6 +102,9 @@ function switchView(name) {
     }
     if (name === 'apps') loadApps();
     if (name === 'builds') loadAllBuilds();
+    if (name === 'builder' && !builderAppId) {
+        headerSubtitle.textContent = 'Select an app to edit';
+    }
 }
 window.switchView = switchView;
 
@@ -1093,10 +1097,13 @@ async function viewAppDetails(appId) {
 
         html += '<div class="detail-section"><h4>Actions</h4>' +
             '<div class="detail-actions">' +
+            '<button class="btn btn-sm btn-accent" onclick="closeModal(\'appDetailModal\');openAppBuilder(\'' + app.id + '\')">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>' +
+            'Builder</button>' +
             '<button class="btn btn-sm btn-primary" onclick="closeModal(\'appDetailModal\');editApp(\'' + app.id + '\')">Edit App</button>' +
             '<button class="btn btn-sm btn-primary" onclick="closeModal(\'appDetailModal\');openPreview(\'' + app.id + '\')">Preview</button>' +
-            '<button class="btn btn-sm btn-warning" onclick="closeModal(\'appDetailModal\');buildApp(\'' + app.id + '\')">Build Android APK</button>' +
-            '<button class="btn btn-sm btn-accent" onclick="publishConfig(\'' + app.id + '\')">Publish</button>' +
+            '<button class="btn btn-sm btn-warning" onclick="closeModal(\'appDetailModal\');buildApp(\'' + app.id + '\')">Build APK</button>' +
+            '<button class="btn btn-sm btn-accent" onclick="closeModal(\'appDetailModal\');publishConfig(\'' + app.id + '\')">Publish</button>' +
             '<a href="' + API + '/apps/' + app.id + '/download" class="btn btn-sm btn-success">Download Source</a>' +
             '</div></div>';
 
@@ -1786,6 +1793,434 @@ function getIconSvg(name, size) {
         AlertCircle: '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
     };
     return icons[name] || icons.Heart;
+}
+
+// ── Standalone App Builder ──
+
+let builderAppId = null;
+
+function openAppBuilder(appId) {
+    builderAppId = appId;
+    switchView('builder');
+    loadAppIntoBuilder(appId);
+}
+
+async function loadAppIntoBuilder(appId) {
+    try {
+        const app = await api('GET', '/apps/' + appId);
+        const cfg = app.config || {};
+        const pc = cfg.project_config || {};
+        const pages = pc.pages || [];
+
+        document.getElementById('builderAppName').textContent = cfg.display_name || cfg.app_name || app.app_name || 'App Builder';
+
+        formPages = pages.map(p => ({
+            id: p.id,
+            name: p.name,
+            icon: '📄',
+            elements: JSON.parse(JSON.stringify(p.elements || [])),
+        }));
+        pageIdCounter = formPages.length;
+        blockIdCounter = countAllBlocks();
+        builderActivePageId = formPages.length > 0 ? formPages[0].id : null;
+        selectedBlockId = null;
+        renderBuilderView();
+    } catch (err) {
+        toast('Failed to load app: ' + err.message, 'error');
+    }
+}
+
+window.openAppBuilder = openAppBuilder;
+
+function exitBuilder() {
+    builderAppId = null;
+    switchView('apps');
+}
+
+window.exitBuilder = exitBuilder;
+
+async function saveBuilderChanges() {
+    if (!builderAppId) { toast('No app loaded', 'error'); return; }
+    try {
+        const app = await api('GET', '/apps/' + builderAppId);
+        const cfg = app.config || {};
+        const pc = cfg.project_config || {};
+
+        pc.pages = formPages.map(p => ({
+            id: p.id,
+            name: p.name,
+            elements: p.elements || [],
+        }));
+
+        const data = {
+            config: {
+                app_name: cfg.app_name || '',
+                display_name: cfg.display_name || '',
+                package_name: cfg.package_name || '',
+                version: cfg.version || '1.0.0',
+                primary_color: cfg.primary_color || '#7c5cfc',
+            },
+            project_config: pc,
+        };
+
+        await api('PUT', '/apps/' + builderAppId, data);
+        toast('App saved!');
+    } catch (err) {
+        toast('Save failed: ' + err.message, 'error');
+    }
+}
+
+window.saveBuilderChanges = saveBuilderChanges;
+
+function builderAddPage(name) {
+    addPage(name);
+    renderBuilderView();
+}
+
+window.builderAddPage = builderAddPage;
+
+function builderAddBlock(type) {
+    addBlock(type);
+    renderBuilderView();
+}
+
+window.builderAddBlock = builderAddBlock;
+
+function builderRemoveBlock(elementId) {
+    removeBlock(elementId);
+    renderBuilderView();
+}
+
+window.builderRemoveBlock = builderRemoveBlock;
+
+function builderMoveBlock(elementId, dir) {
+    moveBlock(elementId, dir);
+    renderBuilderView();
+}
+
+window.builderMoveBlock = builderMoveBlock;
+
+function builderSelectBlock(elementId) {
+    selectedBlockId = selectedBlockId === elementId ? null : elementId;
+    renderBuilderView();
+}
+
+window.builderSelectBlock = builderSelectBlock;
+
+function builderUpdateBlockProp(elementId, key, value) {
+    const page = formPages.find(p => p.id === builderActivePageId);
+    if (!page) return;
+    const el = page.elements.find(e => e.id === elementId);
+    if (!el) return;
+    el.properties[key] = value;
+    renderBuilderView();
+}
+
+window.builderUpdateBlockProp = builderUpdateBlockProp;
+
+function builderUpdateBlockStyle(elementId, key, value) {
+    const page = formPages.find(p => p.id === builderActivePageId);
+    if (!page) return;
+    const el = page.elements.find(e => e.id === elementId);
+    if (!el) return;
+    if (value === '' || value === undefined) { delete el.styles[key]; }
+    else { el.styles[key] = value; }
+    renderBuilderView();
+}
+
+window.builderUpdateBlockStyle = builderUpdateBlockStyle;
+
+function builderUpdateBlockLabel(elementId, value) {
+    const page = formPages.find(p => p.id === builderActivePageId);
+    if (!page) return;
+    const el = page.elements.find(e => e.id === elementId);
+    if (!el) return;
+    el.label = value;
+}
+
+window.builderUpdateBlockLabel = builderUpdateBlockLabel;
+
+function builderUpdateBlockAction(elementId, actionKey, field, value) {
+    const page = formPages.find(p => p.id === builderActivePageId);
+    if (!page) return;
+    const el = page.elements.find(e => e.id === elementId);
+    if (!el) return;
+    if (!el.actions) el.actions = {};
+    if (!el.actions[actionKey]) el.actions[actionKey] = { type: 'none' };
+    el.actions[actionKey][field] = value;
+}
+
+window.builderUpdateBlockAction = builderUpdateBlockAction;
+
+function renderBuilderView() {
+    renderBuilderViewPageTabs();
+    renderBuilderViewPalette();
+    renderBuilderViewCanvas();
+    renderBuilderViewPropsPanel();
+}
+
+function renderBuilderViewPageTabs() {
+    const container = document.getElementById('builderViewPageTabs');
+    container.innerHTML = formPages.map(p =>
+        '<div class="builder-page-tab' + (p.id === builderActivePageId ? ' active' : '') + '" onclick="selectBuilderViewPage(\'' + p.id + '\')">' +
+        esc(p.icon || '📄') + ' ' + esc(p.name) +
+        '<button class="tab-close" onclick="event.stopPropagation();builderRemovePage(\'' + p.id + '\')">&times;</button>' +
+        '</div>'
+    ).join('');
+    if (formPages.length === 0) {
+        container.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);padding:6px 0">No pages. Click "Add" to create one.</div>';
+    }
+}
+
+function selectBuilderViewPage(pageId) {
+    builderActivePageId = pageId;
+    selectedBlockId = null;
+    renderBuilderView();
+}
+
+window.selectBuilderViewPage = selectBuilderViewPage;
+
+function builderRemovePage(pageId) {
+    if (formPages.length <= 1) { toast('Need at least one page', 'error'); return; }
+    formPages = formPages.filter(p => p.id !== pageId);
+    if (builderActivePageId === pageId) builderActivePageId = formPages.length > 0 ? formPages[formPages.length - 1].id : null;
+    selectedBlockId = null;
+    renderBuilderView();
+}
+
+window.builderRemovePage = builderRemovePage;
+
+function renderBuilderViewPalette() {
+    const sections = document.getElementById('builderViewPaletteSections');
+    sections.innerHTML = BLOCK_CATEGORIES.map(cat =>
+        '<div class="palette-section">' +
+        '<div class="palette-title">' + esc(cat.name) + '</div>' +
+        '<div class="palette-items">' +
+        cat.items.map(item =>
+            '<div class="palette-item" onclick="builderAddBlock(\'' + item.type + '\')" title="' + esc(item.label) + '">' +
+            '<span class="palette-item-icon">' + item.icon + '</span> ' + esc(item.label) +
+            '</div>'
+        ).join('') +
+        '</div></div>'
+    ).join('');
+}
+
+function builderFilterPalette(query) {
+    document.querySelectorAll('#builderViewPalette .palette-item').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = !query || text.includes(query.toLowerCase()) ? '' : 'none';
+    });
+    document.querySelectorAll('#builderViewPalette .palette-section').forEach(section => {
+        const visible = section.querySelectorAll('.palette-item[style*="display: none"]').length < section.querySelectorAll('.palette-item').length;
+        section.style.display = visible || !query ? '' : 'none';
+    });
+}
+
+window.builderFilterPalette = builderFilterPalette;
+
+function renderBuilderViewCanvas() {
+    const screen = document.getElementById('builderViewCanvas');
+    const page = formPages.find(p => p.id === builderActivePageId);
+    const nameEl = document.getElementById('builderViewPageName');
+    const countEl = document.getElementById('builderViewBlockCount');
+
+    if (!page) {
+        screen.innerHTML = '<div class="builder-empty">Select a page or create one</div>';
+        nameEl.textContent = 'No page selected';
+        countEl.textContent = '';
+        return;
+    }
+
+    nameEl.textContent = esc(page.icon || '📄') + ' ' + esc(page.name);
+    countEl.textContent = page.elements.length + ' blocks';
+
+    if (page.elements.length === 0) {
+        screen.innerHTML = '<div class="builder-empty">Click blocks from the palette to add them</div>';
+        return;
+    }
+
+    screen.innerHTML = page.elements.map((el, idx) => {
+        const selected = el.id === selectedBlockId;
+        const preview = renderMiniBlock(el);
+        return '<div class="builder-block' + (selected ? ' selected' : '') + '" onclick="builderSelectBlock(\'' + el.id + '\')" data-id="' + el.id + '">' +
+            '<div class="builder-block-toolbar">' +
+            (idx > 0 ? '<button onclick="event.stopPropagation();builderMoveBlock(\'' + el.id + '\',' + (-1) + ')" title="Move up">↑</button>' : '') +
+            (idx < page.elements.length - 1 ? '<button onclick="event.stopPropagation();builderMoveBlock(\'' + el.id + '\',' + 1 + ')" title="Move down">↓</button>' : '') +
+            '<button class="danger" onclick="event.stopPropagation();builderRemoveBlock(\'' + el.id + '\')" title="Delete">✕</button>' +
+            '</div>' +
+            '<div class="builder-block-content">' + preview + '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function renderBuilderViewPropsPanel() {
+    const body = document.getElementById('builderViewPropsBody');
+    const title = document.getElementById('builderViewPropsTitle');
+    const page = formPages.find(p => p.id === builderActivePageId);
+    if (!page || !selectedBlockId) {
+        title.textContent = 'Properties';
+        body.innerHTML = '<div class="props-empty">Select a block to edit its properties</div>';
+        return;
+    }
+    const el = page.elements.find(e => e.id === selectedBlockId);
+    if (!el) {
+        title.textContent = 'Properties';
+        body.innerHTML = '<div class="props-empty">Block not found</div>';
+        return;
+    }
+
+    title.textContent = getBlockIcon(el.type) + ' ' + esc(el.label || el.type);
+
+    const props = el.properties || {};
+    const styles = el.styles || {};
+    const actions = el.actions || {};
+
+    let html = '';
+
+    html += '<div class="prop-group"><label class="prop-label">Label</label>' +
+        '<div class="prop-row"><input type="text" value="' + esc(el.label) + '" onchange="builderUpdateBlockLabel(\'' + el.id + '\',this.value)"></div></div>';
+
+    html += '<div class="prop-section-title">Properties</div>';
+
+    switch (el.type) {
+        case 'heading': case 'text':
+            html += builderPropInput(el.id, 'value', 'Text', props.value);
+            break;
+        case 'button':
+            html += builderPropInput(el.id, 'value', 'Label', props.value);
+            html += builderPropActionSelect(el.id, 'onClick', actions.onClick);
+            if (actions.onClick && actions.onClick.type !== 'none') {
+                html += builderRenderActionFields(el.id, 'onClick', actions.onClick);
+            }
+            break;
+        case 'image': case 'video': case 'banner':
+            html += builderPropInput(el.id, 'src', 'Source URL', props.src);
+            if (el.type === 'banner') {
+                html += builderPropInput(el.id, 'value', 'Title', props.value);
+                html += builderPropInput(el.id, 'placeholder', 'Subtitle', props.placeholder);
+            }
+            break;
+        case 'input': case 'textarea':
+            html += builderPropInput(el.id, 'placeholder', 'Placeholder', props.placeholder);
+            html += builderPropActionSelect(el.id, 'onChange', actions.onChange);
+            break;
+        case 'select':
+            html += builderPropInput(el.id, 'options', 'Options (comma sep)', props.options);
+            html += builderPropActionSelect(el.id, 'onChange', actions.onChange);
+            break;
+        case 'icon':
+            html += builderPropInput(el.id, 'iconName', 'Icon Name', props.iconName);
+            html += builderPropInput(el.id, 'iconSize', 'Size (px)', props.iconSize);
+            break;
+        case 'grid':
+            html += builderPropInput(el.id, 'gridCols', 'Columns', props.gridCols);
+            break;
+        case 'tabs':
+            html += builderPropInput(el.id, 'tabHeaders', 'Tabs (comma sep)', props.tabHeaders);
+            break;
+        case 'table':
+            html += builderPropInput(el.id, 'dataSource', 'Collection', props.dataSource);
+            html += builderPropInput(el.id, 'columns', 'Columns (comma sep)', props.columns);
+            break;
+        case 'list':
+            html += builderPropInput(el.id, 'dataSource', 'Collection', props.dataSource);
+            break;
+        case 'chart':
+            html += '<div class="prop-row"><label>Type</label><select onchange="builderUpdateBlockProp(\'' + el.id + '\',\'chartType\',this.value)">' +
+                '<option value="bar"' + (props.chartType === 'bar' ? ' selected' : '') + '>Bar</option>' +
+                '<option value="line"' + (props.chartType === 'line' ? ' selected' : '') + '>Line</option>' +
+                '<option value="pie"' + (props.chartType === 'pie' ? ' selected' : '') + '>Pie</option>' +
+                '</select></div>';
+            break;
+        case 'carousel':
+            html += builderPropInput(el.id, 'src', 'Image URLs (comma sep)', props.src);
+            break;
+        case 'map':
+            html += builderPropInput(el.id, 'mapLocation', 'Location', props.mapLocation);
+            break;
+        case 'checkbox': case 'switch':
+            html += builderPropInput(el.id, 'label', 'Label', el.label);
+            html += builderPropActionSelect(el.id, 'onChange', actions.onChange);
+            break;
+    }
+
+    html += '<div class="prop-section-title">Styles</div>';
+    html += builderPropStyle(el.id, 'backgroundColor', 'Background', styles.backgroundColor, 'color');
+    html += builderPropStyle(el.id, 'color', 'Text Color', styles.color, 'color');
+    html += builderPropStyle(el.id, 'fontSize', 'Font Size', styles.fontSize);
+    html += builderPropStyle(el.id, 'fontWeight', 'Weight', styles.fontWeight, 'select', ['400', '500', '600', '700', '800']);
+    html += builderPropStyle(el.id, 'padding', 'Padding', styles.padding);
+    html += builderPropStyle(el.id, 'margin', 'Margin', styles.margin);
+    html += builderPropStyle(el.id, 'borderRadius', 'Border Radius', styles.borderRadius);
+    html += builderPropStyle(el.id, 'textAlign', 'Align', styles.textAlign, 'select', ['left', 'center', 'right']);
+
+    body.innerHTML = html;
+}
+
+function builderPropInput(elId, key, label, value) {
+    return '<div class="prop-row"><label>' + esc(label) + '</label>' +
+        '<input type="text" value="' + esc(value !== undefined ? String(value) : '') + '" onchange="builderUpdateBlockProp(\'' + elId + '\',\'' + key + '\',this.value)">' +
+        '</div>';
+}
+
+function builderPropStyle(elId, key, label, value, type, options) {
+    const val = value !== undefined ? String(value) : '';
+    if (type === 'color') {
+        return '<div class="prop-row"><label>' + esc(label) + '</label>' +
+            '<input type="color" value="' + (val || '#000000') + '" onchange="builderUpdateBlockStyle(\'' + elId + '\',\'' + key + '\',this.value)">' +
+            '<input type="text" value="' + val + '" style="flex:1" onchange="builderUpdateBlockStyle(\'' + elId + '\',\'' + key + '\',this.value)">' +
+            '</div>';
+    }
+    if (type === 'select' && options) {
+        return '<div class="prop-row"><label>' + esc(label) + '</label>' +
+            '<select onchange="builderUpdateBlockStyle(\'' + elId + '\',\'' + key + '\',this.value)">' +
+            options.map(o => '<option value="' + o + '"' + (val === o ? ' selected' : '') + '>' + o + '</option>').join('') +
+            '</select></div>';
+    }
+    return '<div class="prop-row"><label>' + esc(label) + '</label>' +
+        '<input type="text" value="' + esc(val) + '" onchange="builderUpdateBlockStyle(\'' + elId + '\',\'' + key + '\',this.value)">' +
+        '</div>';
+}
+
+function builderPropActionSelect(elId, actionKey, action) {
+    const current = (action && action.type) || 'none';
+    return '<div class="prop-row"><label>On ' + esc(actionKey === 'onClick' ? 'Click' : 'Change') + '</label>' +
+        '<select onchange="builderUpdateBlockAction(\'' + elId + '\',\'' + actionKey + '\',\'type\',this.value);renderBuilderViewPropsPanel();">' +
+        '<option value="none"' + (current === 'none' ? ' selected' : '') + '>None</option>' +
+        '<option value="navigate"' + (current === 'navigate' ? ' selected' : '') + '>Navigate</option>' +
+        '<option value="toast"' + (current === 'toast' ? ' selected' : '') + '>Toast</option>' +
+        '<option value="modal"' + (current === 'modal' ? ' selected' : '') + '>Alert</option>' +
+        '<option value="state"' + (current === 'state' ? ' selected' : '') + '>Set State</option>' +
+        '</select></div>';
+}
+
+function builderRenderActionFields(elId, actionKey, action) {
+    if (!action || action.type === 'none') return '';
+    let html = '';
+    if (action.type === 'navigate') {
+        const pages = formPages;
+        html += '<div class="prop-row"><label>Target</label>' +
+            '<select onchange="builderUpdateBlockAction(\'' + elId + '\',\'' + actionKey + '\',\'targetPage\',this.value)">' +
+            pages.map(p => '<option value="' + p.id + '"' + (action.targetPage === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') +
+            '</select></div>';
+    }
+    if (action.type === 'toast') {
+        html += builderPropActionInput(elId, actionKey, 'toastText', 'Message', action.toastText);
+    }
+    if (action.type === 'modal') {
+        html += builderPropActionInput(elId, actionKey, 'modalContent', 'Content', action.modalContent);
+    }
+    if (action.type === 'state') {
+        html += builderPropActionInput(elId, actionKey, 'stateKey', 'State Key', action.stateKey);
+        html += builderPropActionInput(elId, actionKey, 'stateValue', 'State Value', action.stateValue);
+    }
+    return html;
+}
+
+function builderPropActionInput(elId, actionKey, field, label, value) {
+    return '<div class="prop-row"><label>' + esc(label) + '</label>' +
+        '<input type="text" value="' + esc(value || '') + '" onchange="builderUpdateBlockAction(\'' + elId + '\',\'' + actionKey + '\',\'' + field + '\',this.value)">' +
+        '</div>';
 }
 
 // ── Keyboard Shortcuts ──
