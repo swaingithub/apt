@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     .app-page { display: flex; height: 100vh; overflow: hidden; }
-    .app-sidebar { width: 240px; flex-shrink: 0; }
     .app-content { flex: 1; overflow-y: auto; padding: 32px; min-width: 0; }
     .app-content .app-view { display: none; }
     .app-content .app-view.active { display: block; }
@@ -92,8 +91,6 @@
     .build-platform-option small { font-size: 0.7rem; color: var(--text-muted); }
     .build-trigger-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--bg-surface); }
 
-    .app-view-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-    .app-view-header h2 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
     .config-form textarea { width: 100%; min-height: 300px; font-family: monospace; font-size: 0.82rem; padding: 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); resize: vertical; }
 
     .empty-state { text-align: center; padding: 48px 20px; color: var(--text-secondary); }
@@ -102,10 +99,6 @@
     .app-sidebar-brand { padding: 16px 16px 0; font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
     .app-sidebar-brand a { color: var(--text); text-decoration: none; }
     .app-sidebar-brand a:hover { color: var(--primary); }
-    .app-sidebar-header { padding: 12px 16px; }
-    .app-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 16px; background: none; border: none; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; border-radius: var(--radius-sm);  text-align: left; }
-    .app-nav-item:hover { background: var(--bg-hover); color: var(--text); }
-    .app-nav-item.active { background: var(--primary-subtle); color: var(--primary); font-weight: 600; }
     .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 60px 20px; color: var(--text-muted); font-size: 0.85rem; }
 
     .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--bg); }
@@ -370,13 +363,13 @@
       </div>
 
       <div class="layout-inner">
-        <aside class="app-sidebar" style="border-right:1px solid var(--border);display:flex;flex-direction:column">
-          <div class="app-sidebar-app-info" style="padding:16px;text-align:center;border-bottom:1px solid var(--border)">
-            <div class="app-sidebar-avatar" id="dashAvatar" style="width:44px;height:44px;border-radius:12px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;margin:0 auto 8px">A</div>
-            <div class="app-sidebar-app-name" id="dashName" style="font-weight:700;font-size:0.95rem">App</div>
-            <div class="app-sidebar-app-slug" id="dashSlug" style="font-size:0.75rem;color:var(--text-muted);font-family:monospace;margin-top:2px">slug</div>
+        <aside class="app-sidebar">
+          <div class="app-sidebar-app-info">
+            <div class="app-sidebar-avatar" id="dashAvatar">A</div>
+            <div class="app-sidebar-app-name" id="dashName">App</div>
+            <div class="app-sidebar-app-slug" id="dashSlug">slug</div>
           </div>
-          <nav style="padding:8px;flex:1;overflow-y:auto;">
+          <nav>
             <button class="app-nav-item active" data-appview="overview" onclick="switchAppView('overview')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
               Overview
@@ -826,45 +819,8 @@
             <div class="app-view-header">
               <h2>Billing &amp; Subscription</h2>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
-              <div class="section-card" style="margin-top:0;border:1px solid rgba(99,102,241,0.5);background:var(--bg-surface);box-shadow:0 12px 32px rgba(99,102,241,0.15), inset 0 1px 0 var(--border);position:relative;overflow:hidden;border-radius:20px;">
-                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
-                <div style="position:absolute;top:20px;right:20px;background:rgba(99,102,241,0.15);color:var(--primary);border:1px solid rgba(99,102,241,0.3);font-size:0.7rem;font-weight:700;padding:6px 12px;border-radius:99px;text-transform:uppercase;letter-spacing:0.05em;">Current Plan</div>
-                <div class="section-card-body" style="padding:40px 32px;">
-                  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-                    <div style="width:48px;height:48px;border-radius:12px;background:var(--bg-surface);color:var(--primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(255,255,255,0.2);">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                    <h3 style="margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-0.01em;text-shadow:0 2px 4px var(--bg-input);">Pro Plan</h3>
-                  </div>
-                  <div style="font-size:3rem;font-weight:800;margin-bottom:8px;letter-spacing:-0.03em;color:var(--text);">$29<span style="font-size:1.2rem;font-weight:600;color:var(--text-secondary);-webkit-text-fill-color:var(--text-secondary);">/mo</span></div>
-                  <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 32px;line-height:1.5;">Billed monthly. Next invoice on Jun 1st.</p>
-                  <ul style="list-style:none;padding:0;margin:0 0 32px;font-size:0.95rem;display:flex;flex-direction:column;gap:16px;">
-                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Unlimited Pages</span></li>
-                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Premium Templates</span></li>
-                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">OTA Updates</span></li>
-                  </ul>
-                  <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;background:var(--bg-surface);box-shadow:0 6px 20px rgba(99,102,241,0.4);border:none;">Manage Billing</button>
-                </div>
-              </div>
-              <div class="section-card" style="margin-top:0;border:1px solid rgba(255,255,255,0.08);background:var(--bg-surface);border-radius:20px;">
-                <div class="section-card-body" style="padding:40px 32px;">
-                  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-                    <div style="width:48px;height:48px;border-radius:12px;background:var(--bg-hover);color:var(--text);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                    </div>
-                    <h3 style="margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-0.01em;">Enterprise</h3>
-                  </div>
-                  <div style="font-size:3rem;font-weight:800;margin-bottom:8px;letter-spacing:-0.03em;">Custom</div>
-                  <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 32px;line-height:1.5;">For massive scale and dedicated support.</p>
-                  <ul style="list-style:none;padding:0;margin:0 0 32px;font-size:0.95rem;display:flex;flex-direction:column;gap:16px;color:var(--text-secondary);">
-                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span>Custom Integrations</span></li>
-                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span>Dedicated Account Manager</span></li>
-                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span>SLA Guarantees</span></li>
-                  </ul>
-                  <button class="btn btn-outline" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;border:1px solid rgba(255,255,255,0.2);">Contact Sales</button>
-                </div>
-              </div>
+            <div id="billingPlansContainer" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+              <!-- Dynamic plans rendered here -->
             </div>
           </div>
 
@@ -949,8 +905,6 @@
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
             </div>
           </div>
 
@@ -1085,7 +1039,7 @@
                   </div>
                   <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">Stripe Payments</h4>
                   <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Accept credit cards, Apple Pay, and Google Pay directly inside your app securely.</p>
-                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:var(--bg-surface);color:#fff;border:none;box-shadow:0 4px 12px rgba(99,102,241,0.3);">Install Extension</button>
+                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:var(--primary);color:#fff;border:none;box-shadow:0 4px 12px rgba(99,102,241,0.3);">Install Extension</button>
                 </div>
               </div>
 
@@ -1094,12 +1048,12 @@
                 <div class="section-card-body" style="padding:28px 24px;">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
                     <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:#34d399;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="6" x2="6" y2="20"></line></svg>
                     </div>
                   </div>
                   <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">PostHog Analytics</h4>
                   <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Track user behavior, measure feature engagement, and analyze conversion funnels.</p>
-                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:var(--bg-surface);color:#fff;border:none;box-shadow:0 4px 12px rgba(16,185,129,0.3);">Install Extension</button>
+                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:#10b981;color:#fff;border:none;box-shadow:0 4px 12px rgba(16,185,129,0.3);">Install Extension</button>
                 </div>
               </div>
             </div>
@@ -1231,6 +1185,84 @@
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancel</button>
           <button class="btn btn-danger" id="confirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Billing Modal -->
+  <div id="billingModal" class="modal-overlay hidden">
+    <div class="modal modal-sm" style="max-width:480px; border-radius:16px;">
+      <div class="modal-header">
+        <h3>💳 Upgrade to Pro</h3>
+        <button class="modal-close" onclick="closeModal('billingModal')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <p style="color:var(--text-secondary); margin:0 0 20px; font-size:0.95rem;">Experience the power of Apt Pro! Enjoy unlimited page creations, real database OTA synchronization, push notifications broadcasts, and custom integration setups.</p>
+        
+        <div style="background:var(--bg-input); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <span style="font-weight:700; color:var(--text);">Apt Pro Plan</span>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">Billed monthly, cancel anytime.</div>
+          </div>
+          <span style="font-weight:800; font-size:1.4rem; color:var(--primary);">$29/mo</span>
+        </div>
+
+        <form id="billingPortalForm" onsubmit="submitBillingUpgrade(event)">
+          <div class="form-row" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.85rem; font-weight:600; color:var(--text);">Cardholder Name</label>
+            <input type="text" class="form-input" required placeholder="John Doe" style="border-radius:8px;">
+          </div>
+          <div class="form-row" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.85rem; font-weight:600; color:var(--text);">Card Number</label>
+            <input type="text" class="form-input" required placeholder="4242 4242 4242 4242" pattern="[0-9 ]{12,19}" style="border-radius:8px;">
+          </div>
+          <div style="display:flex; gap:16px; margin-bottom:24px;">
+            <div style="flex:1;">
+              <label class="form-label" style="font-size:0.85rem; font-weight:600; color:var(--text);">Expiry Date</label>
+              <input type="text" class="form-input" required placeholder="MM/YY" pattern="(0[1-9]|1[0-2])\/[0-9]{2}" style="border-radius:8px;">
+            </div>
+            <div style="flex:1;">
+              <label class="form-label" style="font-size:0.85rem; font-weight:600; color:var(--text);">CVC / CVV</label>
+              <input type="password" class="form-input" required placeholder="123" pattern="[0-9]{3,4}" style="border-radius:8px;">
+            </div>
+          </div>
+
+          <div style="display:flex; gap:12px; justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('billingModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary" style="background:var(--primary); box-shadow:0 4px 12px rgba(99,102,241,0.35);">Confirm Upgrade</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Store Submission Progress Modal -->
+  <div id="storeSubmitModal" class="modal-overlay hidden">
+    <div class="modal modal-sm" style="max-width:520px; border-radius:16px;">
+      <div class="modal-header">
+        <h3>🚀 Store Deployment Progress</h3>
+        <button class="modal-close" onclick="closeModal('storeSubmitModal')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <p style="color:var(--text-secondary); margin:0 0 20px; font-size:0.95rem;">Building and dispatching native production bundles to store endpoints...</p>
+        
+        <div style="background:var(--bg-input); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:24px; position:relative; overflow:hidden;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-weight:600; font-size:0.9rem;">
+            <span id="storeSubmitStepName" style="color:var(--text);">Initializing...</span>
+            <span id="storeSubmitPercentage" style="color:var(--primary);">0%</span>
+          </div>
+          <div style="height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+            <div id="storeSubmitProgressBar" style="height:100%; width:0%; background:var(--primary); transition:width 0.3s ease;"></div>
+          </div>
+        </div>
+
+        <div style="background:#0f172a; border-radius:12px; padding:16px; font-family:monospace; font-size:0.8rem; line-height:1.6; height:200px; overflow-y:auto; color:#a5f3fc; border:1px solid var(--border);" id="storeSubmitLogs">
+          <!-- Live logs populate here -->
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:24px; gap:12px;">
+          <button class="btn btn-secondary" onclick="closeModal('storeSubmitModal')" id="storeSubmitCloseBtn">Cancel Deployment</button>
         </div>
       </div>
     </div>
