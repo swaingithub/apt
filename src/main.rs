@@ -5,17 +5,14 @@ use log::info;
 use std::env;
 
 mod api;
-mod app_generator;
 mod auth;
-mod builder;
 mod db;
 mod models;
-mod qr_generator;
-mod templates;
+mod services;
 
 use api::{routes, ConfigCache};
-use builder::EASBuilder;
 use db::Database;
+use services::builder::EASBuilder;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,10 +37,6 @@ async fn main() -> anyhow::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::permissive();
 
-        // Try serving React frontend from ./dist, fall back to ./static
-        let dist_index = std::path::Path::new("./dist/index.html");
-        let static_dir = if dist_index.exists() { "./dist" } else { "./static" };
-
         App::new()
             .app_data(db_data.clone())
             .app_data(tracker_data.clone())
@@ -52,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .configure(routes)
-            .service(Files::new("/", static_dir).index_file("index.html"))
+            .service(Files::new("/", "./static").index_file("index.html"))
     })
     .bind(&bind_addr)?
     .run()

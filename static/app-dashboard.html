@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>App Dashboard — Apt</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .app-page { display: flex; height: 100vh; overflow: hidden; }
+    .app-sidebar { width: 240px; flex-shrink: 0; }
+    .app-content { flex: 1; overflow-y: auto; padding: 32px; min-width: 0; }
+    .app-content .app-view { display: none; }
+    .app-content .app-view.active { display: block; }
+    .page-loading { display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px; color: var(--text-secondary); }
+    .app-info-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+    .app-info-card { padding: 8px; }
+    .app-info-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-radius: 12px; margin-bottom: 2px; transition: all 0.2s; border: 1px solid transparent; }
+    .app-info-row:hover { background: var(--bg-hover); border-color: var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
+    .app-info-row:last-child { margin-bottom: 0; }
+    .app-info-row .info-label { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; flex-shrink: 0; margin-right: 16px; }
+    .app-info-row .info-value { font-size: 0.95rem; color: var(--text); font-weight: 600; text-align: right; word-break: break-all; }
+    .app-info-row .info-mono { font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace; font-size: 0.8rem; background: var(--bg-input); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); color: var(--text-secondary); letter-spacing: -0.01em; }
+    .app-quick-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+    .app-page-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; }
+    .app-page-item .page-name { font-weight: 600; font-size: 0.9rem; }
+    .app-page-item .page-blocks { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+    .app-page-item .page-actions { display: flex; gap: 6px; }
+
+    .builds-list { display: flex; flex-direction: column; gap: 8px; }
+    @keyframes buildPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes barShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .build-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s, box-shadow 0.3s; }
+    .build-card:hover { border-color: var(--primary); }
+    .build-card.active-build { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary-subtle), 0 4px 16px rgba(99,102,241,0.08); }
+    .build-card-body { padding: 16px 18px; display: flex; align-items: flex-start; gap: 14px; }
+    .build-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1rem; }
+    .build-icon.queued, .build-icon.pending { background: rgba(234,179,8,0.12); color: #eab308; }
+    .build-icon.building, .build-icon.downloading { background: rgba(99,102,241,0.12); color: #6366f1; }
+    .build-icon.completed { background: rgba(34,208,108,0.12); color: #22d06c; }
+    .build-icon.failed { background: rgba(239,68,68,0.12); color: #ef4444; }
+    .build-icon.cancelled { background: rgba(156,163,175,0.12); color: #9ca3af; }
+    .build-icon.building svg { animation: spin 2s linear infinite; }
+    .build-icon.pending svg, .build-icon.queued svg { animation: buildPulse 1.5s ease-in-out infinite; }
+
+    .build-info { flex: 1; min-width: 0; }
+    .build-info-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; flex-wrap: wrap; }
+    .build-platform { font-size: 0.75rem; padding: 1px 8px; border-radius: 4px; background: var(--bg-surface); color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; }
+    .build-version { font-size: 0.78rem; color: var(--text-muted); }
+    .build-status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; text-transform: capitalize; }
+    .build-status-badge.queued, .build-status-badge.pending { background: rgba(234,179,8,0.1); color: #eab308; }
+    .build-status-badge.building, .build-status-badge.downloading { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .build-status-badge.completed { background: rgba(34,208,108,0.1); color: #22d06c; }
+    .build-status-badge.failed { background: rgba(239,68,68,0.1); color: #ef4444; }
+    .build-status-badge.cancelled { background: rgba(156,163,175,0.1); color: #9ca3af; }
+
+    .build-stage { font-size: 0.78rem; font-weight: 500; color: var(--text-secondary); margin-top: 3px; }
+    .build-message { font-size: 0.77rem; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+    .build-meta { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+    .build-meta-item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text-muted); }
+    .build-meta-item svg { opacity: 0.5; flex-shrink: 0; }
+
+    .build-progress-wrap { margin-top: 10px; position: relative; }
+    .build-progress-label { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 3px; }
+    .build-progress-bar { height: 5px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .build-progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #6366f1, #818cf8); transition: width 0.8s ease; }
+    .build-progress-fill.active { background: linear-gradient(90deg, #6366f1, #a5b4fc, #6366f1); background-size: 200% 100%; animation: barShimmer 2s linear infinite; }
+    .build-progress-fill.completed { background: linear-gradient(90deg, #22d06c, #34d97b); }
+    .build-progress-fill.failed { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    .build-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; align-self: center; }
+    .build-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 52px 20px; text-align: center; }
+    .build-empty svg { opacity: 0.25; margin-bottom: 12px; }
+    .build-empty strong { font-size: 0.9rem; color: var(--text-secondary); }
+    .build-empty span { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+    .build-empty .btn { margin-top: 16px; }
+
+    .build-trigger-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
+    .build-trigger-panel { background: var(--bg-card); border-radius: var(--radius); padding: 0; width: 380px; max-width: 90vw; box-shadow: 0 12px 40px rgba(0,0,0,0.2); overflow: hidden; }
+    .build-trigger-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+    .build-trigger-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+    .build-trigger-header p { margin: 4px 0 0; font-size: 0.78rem; color: var(--text-muted); }
+    .build-trigger-platforms { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 20px; }
+    .build-platform-option { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 12px; border: 2px solid var(--border); border-radius: var(--radius); cursor: pointer; background: var(--bg); transition: all 0.15s; }
+    .build-platform-option:hover { border-color: var(--primary); background: var(--primary-subtle); }
+    .build-platform-option:active { transform: scale(0.97); }
+    .build-platform-option.selected { border-color: var(--primary); background: var(--primary-subtle); }
+    .build-platform-option svg { width: 32px; height: 32px; stroke: var(--text-secondary); }
+    .build-platform-option.selected svg { stroke: var(--primary); }
+    .build-platform-option span { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); }
+    .build-platform-option.selected span { color: var(--primary); }
+    .build-platform-option small { font-size: 0.7rem; color: var(--text-muted); }
+    .build-trigger-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid var(--border); background: var(--bg-surface); }
+
+    .app-view-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .app-view-header h2 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+    .config-form textarea { width: 100%; min-height: 300px; font-family: monospace; font-size: 0.82rem; padding: 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); resize: vertical; }
+
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--text-secondary); }
+    .empty-state h3 { margin: 0 0 8px; font-size: 1rem; color: var(--text); }
+    .empty-state p { margin: 0 0 16px; font-size: 0.85rem; }
+    .app-sidebar-brand { padding: 16px 16px 0; font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+    .app-sidebar-brand a { color: var(--text); text-decoration: none; }
+    .app-sidebar-brand a:hover { color: var(--primary); }
+    .app-sidebar-header { padding: 12px 16px; }
+    .app-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 16px; background: none; border: none; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; border-radius: var(--radius-sm);  text-align: left; }
+    .app-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+    .app-nav-item.active { background: var(--primary-subtle); color: var(--primary); font-weight: 600; }
+    .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 60px 20px; color: var(--text-muted); font-size: 0.85rem; }
+
+    .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--bg); }
+    .top-bar-left { display: flex; align-items: center; gap: 12px; }
+    .top-bar-right { display: flex; align-items: center; gap: 10px; }
+    .top-bar h1 { font-size: 1rem; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+    .top-bar .app-badge { font-size: 0.72rem; padding: 2px 10px; border-radius: 999px; background: var(--primary-subtle); color: var(--primary); font-weight: 600; }
+    .layout-inner { display: flex; flex: 1; overflow: hidden; }
+
+    /* Section card */
+    .section-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 20px; }
+    .section-card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .section-card-header h3 { margin: 0; font-size: 0.9rem; font-weight: 600; }
+    .section-card-body { padding: 0; }
+    .section-card-empty { text-align: center; padding: 32px 20px; color: var(--text-muted); font-size: 0.85rem; }
+
+    /* Published item */
+    .pub-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .pub-item:last-child { border-bottom: none; }
+    .pub-item .pub-version { font-weight: 600; font-size: 0.85rem; }
+    .pub-item .pub-date { font-size: 0.78rem; color: var(--text-muted); }
+    .pub-item .pub-current { font-size: 0.68rem; padding: 1px 8px; border-radius: 999px; background: var(--success-subtle); color: var(--success); font-weight: 600; }
+
+    /* QR code */
+    .qr-container { text-align: center; padding: 16px; }
+    .qr-container img { width: 120px; height: 120px; border-radius: 8px; }
+    .qr-container .qr-label { font-size: 0.72rem; color: var(--text-muted); margin-top: 8px; }
+
+    /* Settings form modal */
+    .settings-form .form-row { margin-bottom: 16px; }
+    .settings-form label { display: block; font-size: 0.82rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
+
+    /* Inline preview mini phone */
+    .mini-phone-frame { width: 100%; aspect-ratio: 9 / 18; max-height: 320px; background: #0b0d12; border-radius: 28px; padding: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.35); position: relative; margin: 0 auto; }
+    .mini-dynamic-island { width: 44px; height: 10px; background: #0b0d12; border-radius: 5px; position: absolute; top: 3px; left: 50%; transform: translateX(-50%); z-index: 5; }
+    .mini-screen { background: #f2f2f7; height: 100%; border-radius: 22px; overflow-y: auto; padding: 0; color: #000; font-size: 0.7rem; }
+
+    /* iOS preview styles */
+    .ios-nav { position: sticky; top: 0; z-index: 2; padding: 16px 16px 10px; text-align: center; }
+    .ios-nav-title { font-size: 0.78rem; font-weight: 600; letter-spacing: -0.02em; }
+    .ios-content { padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .ios-heading { font-size: 0.9rem; font-weight: 700; padding: 4px 0; letter-spacing: -0.02em; }
+    .ios-text { font-size: 0.7rem; line-height: 1.45; padding: 2px 0; }
+    .ios-image { padding: 0; }
+    .ios-image-placeholder { width: 100%; height: 64px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 500; }
+    .ios-button-wrap { padding: 4px 0; }
+    .ios-button { padding: 10px 20px; border-radius: 10px; text-align: center; font-size: 0.72rem; font-weight: 600; letter-spacing: -0.01em; }
+    .ios-card { border-radius: 10px; padding: 12px; margin: 2px 0; }
+    .ios-card-title { font-size: 0.72rem; font-weight: 600; margin-bottom: 4px; }
+    .ios-card-text { font-size: 0.65rem; line-height: 1.4; }
+    .ios-row { display: flex; gap: 8px; padding: 2px 0; }
+    .ios-row-item { flex: 1; height: 48px; border-radius: 8px; }
+    .ios-divider { height: 0.5px; margin: 2px 0; }
+    .ios-list { margin: 4px 0; }
+    .ios-list-item { padding: 10px 14px; font-size: 0.7rem; font-weight: 500; }
+    .ios-icon-wrap { display: flex; justify-content: center; padding: 6px 0; }
+    .ios-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
+    .ios-empty { text-align: center; padding: 48px 20px; font-size: 0.72rem; font-weight: 500; }
+    .ios-more { text-align: center; padding: 6px; font-size: 0.6rem; font-weight: 500; }
+
+    /* Interactive Simulator Elements */
+    .sim-btn { width: 100%; border: none; font-family: inherit; cursor: pointer; transition: opacity 0.15s; outline: none; }
+    .sim-btn:active { opacity: 0.7; }
+    .sim-input { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; font-family: inherit; outline: none; transition: border-color 0.2s; }
+    .sim-input:focus { border-color: #6366f1; }
+    .sim-select { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; font-family: inherit; appearance: none; outline: none; }
+    .sim-textarea { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; font-family: inherit; min-height: 80px; resize: vertical; outline: none; }
+    .sim-checkbox { width: 18px; height: 18px; accent-color: #6366f1; cursor: pointer; margin: 0; }
+    .sim-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .sim-switch input { opacity: 0; width: 0; height: 0; }
+    .sim-switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 24px; }
+    .sim-switch-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .sim-switch input:checked + .sim-switch-slider { background-color: #10b981; }
+    .sim-switch input:checked + .sim-switch-slider:before { transform: translateX(20px); }
+    .sim-img { width: 100%; display: block; border-radius: 8px; object-fit: cover; background: #e2e8f0; }
+    .sim-img-fallback { width: 100%; height: 160px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; color: #94a3b8; border-radius: 8px; font-size: 0.8rem; border: 1px dashed #cbd5e1; }
+    .sim-tab-container { display: flex; border-bottom: 1px solid #e2e8f0; }
+    .sim-tab { flex: 1; padding: 12px 0; text-align: center; font-size: 0.8rem; font-weight: 600; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; }
+    .sim-tab.active { color: #0f172a; border-bottom-color: #0f172a; }
+    .sim-ecommerce-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .sim-ecommerce-item { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; }
+    .sim-ecommerce-img { height: 120px; background: #f8fafc; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+    .sim-ecommerce-meta { padding: 10px; }
+    .sim-ecommerce-title { font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; color: #0f172a; }
+    .sim-ecommerce-price { font-size: 0.8rem; font-weight: 700; color: #10b981; }
+
+    .overview-side .mini-phone-frame { max-height: 360px; }
+
+    .overview-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 12px; flex-wrap: wrap; }
+    .overview-identity { display: flex; align-items: center; gap: 14px; }
+    .overview-avatar { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .overview-name { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+    .overview-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+    .overview-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .overview-grid { display: grid; grid-template-columns: 1fr 280px; gap: 20px; align-items: start; }
+    .overview-main { min-width: 0; }
+
+    /* Pages */
+    .app-pages-list { display: flex; flex-direction: column; gap: 0; }
+    .page-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; overflow: hidden; }
+    .page-card-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; -webkit-user-select: none; user-select: none;  }
+    .page-card-header:hover { background: var(--bg-hover); }
+    .page-card-icon { width: 34px; height: 34px; border-radius: 8px; background: var(--primary-subtle); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .page-card-info { flex: 1; min-width: 0; }
+    .page-card-name { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+    .page-card-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+    .page-home-badge { display: inline-block; font-size: 0.62rem; font-weight: 600; padding: 1px 7px; border-radius: 4px; background: var(--primary-subtle); color: var(--primary); vertical-align: middle; margin-left: 6px; letter-spacing: 0.01em; }
+    .page-card-chevron { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center;  }
+    .page-card-chevron:hover { background: var(--bg-surface); color: var(--text); }
+    .page-card-actions { display: flex; gap: 2px; padding: 2px 18px 10px; flex-wrap: wrap; }
+    .page-action-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 5px; border-radius: 5px; display: inline-flex; align-items: center;  }
+    .page-action-btn:hover { background: var(--bg-hover); color: var(--text); }
+    .page-action-btn.page-action-danger:hover { background: var(--danger-subtle); color: var(--danger); }
+    .page-blocks-list { border-top: 1px solid var(--border); background: var(--bg-surface); }
+    .page-blocks-list.hidden { display: none; }
+    .block-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); }
+    .block-item:last-child { border-bottom: none; }
+    .block-type-icon { width: 28px; height: 28px; border-radius: 6px; background: var(--primary-subtle); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .block-info { flex: 1; min-width: 0; }
+    .block-type { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+    .menu-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 60px 20px; color: var(--text-muted); font-size: 0.85rem; }
+    .block-preview { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .block-actions { display: flex; gap: 2px; flex-shrink: 0; }
+    .page-blocks-empty { text-align: center; padding: 20px; font-size: 0.8rem; color: var(--text-muted); }
+
+    .add-page-form { display: flex; gap: 8px; margin-top: 16px; padding: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+    .add-page-form.hidden { display: none; }
+    .rename-input { font-size: 0.85rem; font-weight: 600; padding: 2px 6px; border: 1px solid var(--primary); border-radius: 4px; background: var(--bg-input); color: var(--text); outline: none; width: auto; min-width: 120px; }
+
+    /* Native Builder */
+    .dbuilder-layout { display: grid; grid-template-columns: 240px 1fr 260px; gap: 0; flex: 1; min-height: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .app-view[data-appview="builder"] { height: calc(100vh - 64px); display: none; flex-direction: column; }
+    .app-view[data-appview="builder"].active { display: flex; }
+
+    .dbuilder-palette { border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-surface); }
+    .dbuilder-palette-search { padding: 10px; border-bottom: 1px solid var(--border); }
+    .dbuilder-palette-search input { width: 100%; padding: 7px 10px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); outline: none; }
+    .dbuilder-palette-section { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .dbuilder-palette-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding: 4px 12px 6px; }
+    .dbuilder-palette-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 0.78rem; cursor: pointer; color: var(--text-secondary); border-radius: 4px; margin: 1px 6px;  }
+    .dbuilder-palette-item:hover { background: var(--bg-hover); color: var(--text); }
+
+    .dbuilder-canvas-wrap { display: flex; flex-direction: column; overflow: hidden; }
+    .dbuilder-canvas-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
+    .dbuilder-page-tab { display: flex; align-items: center; gap: 5px; padding: 5px 12px; font-size: 0.78rem; border-radius: 6px; cursor: pointer; color: var(--text-secondary); white-space: nowrap;  }
+    .dbuilder-page-tab:hover { background: var(--bg-hover); }
+    .dbuilder-page-tab.active { background: var(--primary-subtle); color: var(--primary); font-weight: 600; }
+    .dbuilder-page-tab .tab-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0 2px; font-size: 0.85rem; line-height: 1; border-radius: 3px; }
+    .dbuilder-page-tab .tab-close:hover { color: var(--danger); background: var(--danger-subtle); }
+
+    .dbuilder-phone-frame { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 16px; overflow: auto; }
+    .dbuilder-hardware-frame { width: 300px; height: 620px; background: #0b0d12; border-radius: 36px; padding: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); position: relative; margin: auto; display: flex; flex-direction: column; }
+    .dbuilder-phone-notch { width: 85px; height: 24px; background: #0b0d12; border-radius: 12px; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10; }
+    .dbuilder-phone-screen { flex: 1; width: 100%; background: var(--phone-bg, #f2f2f7); border-radius: 26px; padding: 48px 12px 12px; position: relative; overflow-y: auto; color: var(--phone-text, #000); }
+    .dbuilder-phone-screen .dbuilder-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 0.8rem; }
+
+    .dbuilder-props { border-left: 1px solid var(--border); overflow-y: auto; background: var(--bg-surface); }
+    .dbuilder-props-header { padding: 10px 14px; font-size: 0.82rem; font-weight: 600; border-bottom: 1px solid var(--border); }
+    .dbuilder-props-body { padding: 10px; }
+    .dbuilder-props-empty { text-align: center; padding: 40px 10px; font-size: 0.78rem; color: var(--text-muted); }
+    .dbuilder-prop-group { margin-bottom: 10px; }
+    .dbuilder-prop-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .dbuilder-prop-row { display: flex; gap: 6px; align-items: center; }
+    .dbuilder-prop-row input, .dbuilder-prop-row select { flex: 1; padding: 6px 8px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-input); color: var(--text); outline: none; }
+    .dbuilder-prop-row input[type="color"] { width: 36px; flex: none; padding: 2px; height: 30px; cursor: pointer; }
+    .dbuilder-section-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 10px 0 6px; border-top: 1px solid var(--border); margin-top: 6px; }
+    .dbuilder-prop-action-select { padding: 6px 8px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-input); color: var(--text); width: 100%; }
+
+    .dbuilder-block { border: 2px solid transparent; border-radius: 6px; margin: 2px 0; cursor: pointer; position: relative;  }
+    .dbuilder-block.selected { border-color: var(--primary); background: rgba(99,102,241,0.06); }
+    .dbuilder-block:hover { background: rgba(99,102,241,0.04); }
+    .dbuilder-block-toolbar { display: none; position: absolute; top: -22px; right: 0; gap: 2px; z-index: 5; }
+    .dbuilder-block.selected .dbuilder-block-toolbar { display: flex; }
+    .dbuilder-block-toolbar button { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; }
+    .dbuilder-block-toolbar button:hover { color: var(--text); }
+    .dbuilder-block-toolbar button.danger:hover { color: var(--danger); background: var(--danger-subtle); }
+    .dbuilder-block-content { padding: 4px; }
+    .dbuilder-children { margin: 6px 0 4px 12px; padding: 4px 0 4px 8px; border-left: 2px solid var(--border); border-radius: 2px; }
+    .dbuilder-children .dbuilder-block { margin: 2px 0; }
+    .dbuilder-empty-child { font-size: 0.68rem; color: var(--text-muted); padding: 6px 8px; font-style: italic; }
+    .dbuilder-add-child { font-size: 0.7rem; color: var(--primary); padding: 4px 8px; cursor: pointer; border-radius: 4px; font-weight: 500; }
+    .dbuilder-add-child:hover { background: var(--primary-subtle); }
+
+    /* App Menu — polished */
+    .app-menu-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+
+    .menu-type-selector { display: flex; gap: 0; margin-bottom: 20px; background: var(--bg-surface); border-radius: 10px; padding: 3px; border: 1px solid var(--border); }
+    .menu-type-btn { flex: 1; padding: 8px 16px; border: none; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.15s; }
+    .menu-type-btn:hover { color: var(--text-secondary); }
+    .menu-type-btn.active { background: var(--bg-card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-weight: 600; }
+    .menu-type-btn svg { vertical-align: middle; margin-right: 4px; }
+
+    .menu-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .menu-section-header h3 { font-size: 0.85rem; font-weight: 600; margin: 0; }
+    .menu-section-header .menu-count { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+
+    .menu-item-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 20px; display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); transition: border-color 0.15s; }
+    .menu-item-card:not(:last-child) { margin-bottom: 8px; }
+    .menu-item-card:hover { border-color: var(--primary); }
+    .menu-item-drag { color: var(--text-muted); opacity: 0.3; cursor: grab; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; user-select: none; }
+    .menu-item-card:hover .menu-item-drag { opacity: 0.6; }
+    .menu-item-icon-wrap { width: 34px; height: 34px; border-radius: 8px; background: var(--primary-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.1rem; }
+    .menu-item-fields { display: grid; grid-template-columns: 1fr 120px; gap: 8px; align-items: center; }
+    .menu-item-fields input, .menu-item-fields select { margin: 0; }
+    .menu-item-fields input { padding: 7px 10px; font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); outline: none; transition: border-color 0.15s; }
+    .menu-item-fields input:focus { border-color: var(--primary); }
+    .menu-item-fields select { padding: 7px 10px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); outline: none; cursor: pointer; transition: border-color 0.15s; }
+    .menu-item-fields select:focus { border-color: var(--primary); }
+    .menu-item-actions { display: flex; gap: 2px; }
+    .menu-item-actions button { padding: 4px; }
+
+    .menu-add-row { border-top: 1px solid var(--border); padding: 12px 20px 14px; }
+    .menu-add-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 10px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
+    .menu-add-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-subtle); }
+
+    .menu-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; color: var(--text-muted); text-align: center; }
+    .menu-empty svg { margin-bottom: 10px; opacity: 0.4; }
+    .menu-empty strong { font-size: 0.85rem; color: var(--text-secondary); }
+    .menu-empty span { font-size: 0.78rem; margin-top: 2px; }
+
+    /* Menu phone preview */
+    .menu-preview-frame { background: #000; border-radius: 28px; padding: 10px; width: 260px; margin: 0 auto; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+    .menu-preview-screen { background: #fff; border-radius: 20px; overflow: hidden; min-height: 160px; display: flex; flex-direction: column; }
+    .menu-preview-header { padding: 16px 16px 8px; font-size: 1rem; font-weight: 600; color: #000; text-align: center; }
+    .menu-preview-content { flex: 1; padding: 28px 16px; display: flex; align-items: center; justify-content: center; }
+    .menu-preview-content span { font-size: 0.8rem; color: #aaa; }
+    .menu-preview-tabbar { display: flex; background: #f2f2f7; border-top: 1px solid #e0e0e5; padding: 4px 6px 6px; }
+    .menu-preview-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px 2px 4px; font-size: 0.6rem; color: #8e8e93; transition: color 0.15s; user-select: none; }
+    .menu-preview-tab .tab-icon { font-size: 1.2rem; line-height: 1.2; }
+    .menu-preview-tab .tab-label { font-size: 0.6rem; margin-top: 2px; font-weight: 500; }
+    .menu-preview-tab.active { color: #007aff; }
+
+    /* Emoji picker */
+    .emoji-picker-popup { position: fixed; z-index: 10000; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 30px rgba(0,0,0,0.15); padding: 8px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-width: 260px; }
+    .emoji-picker-popup button { background: none; border: none; border-radius: 4px; padding: 4px; cursor: pointer; font-size: 1.2rem; line-height: 1; transition: background 0.1s; }
+    .emoji-picker-popup button:hover { background: var(--primary-subtle); }
+  </style>
+</head>
+<body>
+  <div class="app-page" id="app">
+    <div class="page-loading" id="loadingState">
+      <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
+      <span>Loading app...</span>
+    </div>
+
+    <div id="dashboardContent" style="display:none">
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <a href="/" style="color:var(--text-muted);text-decoration:none;font-size:0.85rem">&larr; Apt Dashboard</a>
+          <span style="color:var(--border);font-size:0.85rem">/</span>
+          <h1 id="dashTitle">App</h1>
+          <span class="app-badge" id="dashVersion">v1.0.0</span>
+        </div>
+        <div class="top-bar-right">
+          <button class="btn btn-sm btn-ghost" onclick="editAppSettings()" title="App settings" style="padding:6px;line-height:1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </button>
+          <button class="btn btn-sm btn-ghost" id="themeToggleBtn" title="Toggle theme" style="padding:6px;line-height:1">
+            <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="layout-inner">
+        <aside class="app-sidebar" style="border-right:1px solid var(--border);display:flex;flex-direction:column">
+          <div class="app-sidebar-app-info" style="padding:16px;text-align:center;border-bottom:1px solid var(--border)">
+            <div class="app-sidebar-avatar" id="dashAvatar" style="width:44px;height:44px;border-radius:12px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;margin:0 auto 8px">A</div>
+            <div class="app-sidebar-app-name" id="dashName" style="font-weight:700;font-size:0.95rem">App</div>
+            <div class="app-sidebar-app-slug" id="dashSlug" style="font-size:0.75rem;color:var(--text-muted);font-family:monospace;margin-top:2px">slug</div>
+          </div>
+          <nav style="padding:8px;flex:1;overflow-y:auto;">
+            <button class="app-nav-item active" data-appview="overview" onclick="switchAppView('overview')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              Overview
+            </button>
+            <button class="app-nav-item" data-appview="builder" onclick="switchAppView('builder')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 17l-5.5 4 2-7L3 9h7z"/></svg>
+              Builder
+            </button>
+            <button class="app-nav-item" data-appview="menu" onclick="switchAppView('menu')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              App Menu
+            </button>
+            <button class="app-nav-item" data-appview="pages" onclick="switchAppView('pages')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Pages
+            </button>
+            <button class="app-nav-item" data-appview="builds" onclick="switchAppView('builds')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Builds
+            </button>
+            <button class="app-nav-item" data-appview="config" onclick="switchAppView('config')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+              Config
+            </button>
+            <button class="app-nav-item" data-appview="push" onclick="switchAppView('push')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              Push Notification
+            </button>
+            <button class="app-nav-item" data-appview="blocks" onclick="switchAppView('blocks')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              Reusable blocks
+            </button>
+
+            <button class="app-nav-item" data-appview="update-app" onclick="switchAppView('update-app')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              Update App
+            </button>
+            <button class="app-nav-item" data-appview="languages" onclick="switchAppView('languages')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7"></path><path d="M9 3v2c0 4.418-2.239 8-5 8"></path><path d="M5 9c-.066.861-.318 1.684-.734 2.433"></path><path d="M12.923 11a12 12 0 0 0 -2.339 -4.015"></path><path d="M13 13l-4 -4"></path><path d="M12 20l4 -9l4 9"></path><path d="M14.9 17h4.2"></path></svg>
+              Languages
+            </button>
+            <button class="app-nav-item" data-appview="subscription" onclick="switchAppView('subscription')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+              Subscription
+            </button>
+            <button class="app-nav-item" data-appview="upload" onclick="switchAppView('upload')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              Upload to Store
+            </button>
+            <button class="app-nav-item" data-appview="settings" onclick="switchAppView('settings')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              Settings
+            </button>
+            <button class="app-nav-item" data-appview="extensions" onclick="switchAppView('extensions')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+              Extensions
+            </button>
+            <button class="app-nav-item" data-appview="integrations" onclick="switchAppView('integrations')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              Integrations
+            </button>
+            <button class="app-nav-item" data-appview="themes" onclick="switchAppView('themes')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+              Themes
+            </button>
+          </nav>
+          <div style="padding:12px 16px;border-top:1px solid var(--border)">
+            <button class="btn btn-sm btn-ghost" onclick="deleteApp()" style="color:var(--danger);width:100%;justify-content:center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Delete App
+            </button>
+          </div>
+        </aside>
+
+        <div class="app-content">
+          <!-- Overview -->
+          <div class="app-view active" data-appview="overview" style="padding: 0; max-width: 1200px; margin: 0 auto;">
+            <!-- Clean Header -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;">
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <div id="overviewAvatar" style="width: 48px; height: 48px; border-radius: 8px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 600;">A</div>
+                <div>
+                  <h1 id="overviewName" style="font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 4px; color: var(--text);">App Name</h1>
+                  <div id="overviewMeta" style="font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 12px; align-items: center; font-weight: 500;">
+                    <!-- JS fills this -->
+                  </div>
+                </div>
+              </div>
+              <div id="overviewActions" style="display: flex; gap: 10px;">
+                <!-- JS fills this -->
+              </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 340px; gap: 32px;">
+              <!-- Left Column: Data -->
+              <div style="display: flex; flex-direction: column; gap: 32px;">
+                <!-- App Details -->
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border);">
+                    <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0; color: var(--text);">App Details</h3>
+                    <button class="btn btn-sm btn-ghost" onclick="editAppSettings()" style="font-size: 0.8rem; padding: 4px 10px;">Edit</button>
+                  </div>
+                  <div id="appInfoCard" style="padding: 8px 20px 20px;">
+                    <div class="loading"><span class="spinner"></span> Loading...</div>
+                  </div>
+                </div>
+
+                <!-- Deployments -->
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border);">
+                    <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0; color: var(--text);">Deployments</h3>
+                    <button class="btn btn-sm btn-primary" onclick="publishConfig()" style="font-size: 0.8rem; padding: 4px 12px; border-radius: 6px;">Deploy</button>
+                  </div>
+                  <div id="publishedList" style="padding: 20px; font-size: 0.85rem; color: var(--text-secondary); text-align: center;">
+                    No deployments found.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: Visuals -->
+              <div style="display: flex; flex-direction: column; gap: 32px;">
+                <!-- Preview -->
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border);">
+                    <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0; color: var(--text);">Live Preview</h3>
+                    <button class="btn btn-sm btn-ghost" onclick="openBuilder()" style="font-size: 0.8rem; padding: 4px 10px;">Open Builder</button>
+                  </div>
+                  <div style="padding: 32px 24px; display: flex; justify-content: center; background: var(--bg);">
+                    <div class="dbuilder-hardware-frame" style="transform: scale(0.8); transform-origin: top center; margin-bottom: -120px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                      <div class="dbuilder-phone-notch"></div>
+                      <div class="dbuilder-phone-screen" id="miniPreview" style="background: #ffffff;">
+                        <div style="text-align:center; padding:40px 0; color:var(--text-muted); font-size:0.75rem;">Loading preview...</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- QR -->
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;">
+                  <div style="padding: 16px 20px; border-bottom: 1px solid var(--border);">
+                    <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0; color: var(--text);">Test on Device</h3>
+                  </div>
+                  <div style="padding: 32px 20px; text-align: center;">
+                    <div id="qrContainer">
+                      <div style="font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-input); border: 1px dashed var(--border); border-radius: 8px; padding: 24px;">Publish to generate QR code</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Builder -->
+          <div class="app-view" data-appview="builder">
+            <div class="app-view-header" style="flex-shrink:0">
+              <h2>App Builder</h2>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-sm btn-success" onclick="saveDashboardBuilder()">Save Changes</button>
+              </div>
+            </div>
+            <div class="dbuilder-layout" id="dbuilderLayout">
+              <div class="dbuilder-palette" id="dbuilderPalette">
+                <div class="dbuilder-palette-search">
+                  <input type="text" id="dbuilderPaletteSearch" placeholder="Search blocks..." oninput="dbuilderFilterPalette(this.value)">
+                </div>
+                <div class="dbuilder-palette-sections" id="dbuilderPaletteSections"></div>
+              </div>
+              <div class="dbuilder-canvas-wrap">
+                <div class="dbuilder-canvas-header">
+                  <div class="dbuilder-page-tabs" id="dbuilderPageTabs"></div>
+                  <button class="btn btn-sm btn-outline" onclick="dBaddPage()" title="Add page">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                </div>
+                <div class="dbuilder-phone-frame">
+                  <div class="dbuilder-hardware-frame">
+                    <div class="dbuilder-phone-notch"></div>
+                    <div class="dbuilder-phone-screen" id="dbuilderCanvas">
+                      <div class="dbuilder-empty">Select a page to begin</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="dbuilder-props" id="dbuilderProps">
+                <div class="dbuilder-props-header">
+                  <span id="dbuilderPropsTitle">Properties</span>
+                </div>
+                <div class="dbuilder-props-body" id="dbuilderPropsBody">
+                  <div class="dbuilder-props-empty">Select a block</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- App Menu -->
+          <div class="app-view" data-appview="menu">
+            <div class="app-view-header">
+              <h2>App Menu <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted)">— Navigation &amp; tab bar</span></h2>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-sm btn-success" onclick="saveAppMenu()">Save Menu</button>
+              </div>
+            </div>
+            <div class="menu-type-selector" id="menuTypeSelector"></div>
+            <div class="app-menu-layout">
+              <div>
+                <div class="section-card" style="margin-top:0">
+                  <div class="section-card-header">
+                    <h3>Menu Items</h3>
+                    <span style="font-size:0.75rem;color:var(--text-muted)" id="menuItemCount"></span>
+                  </div>
+                  <div class="section-card-body" id="menuItemsList">
+                  </div>
+                  <div class="menu-add-row" id="menuAddRow">
+                    <button class="menu-add-btn" onclick="addMenuItem()">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Menu Item
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div class="section-card" style="margin-top:0">
+                  <div class="section-card-header">
+                    <h3>Preview</h3>
+                    <span style="font-size:0.75rem;color:var(--text-muted)">iOS tab bar</span>
+                  </div>
+                  <div class="section-card-body" id="menuPreviewBody" style="display:flex;align-items:center;justify-content:center;padding:24px 16px;min-height:140px">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pages -->
+          <div class="app-view" data-appview="pages">
+            <div class="app-view-header">
+              <h2>Pages <span id="pageCount" style="font-weight:400;font-size:0.85rem;color:var(--text-muted)"></span></h2>
+              <button class="btn btn-sm btn-primary" onclick="showAddPageForm()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Page
+              </button>
+            </div>
+            <div id="appPagesList" class="app-pages-list">
+              <div class="loading"><span class="spinner"></span> Loading pages...</div>
+            </div>
+            <div id="addPageForm" class="add-page-form hidden">
+              <input type="text" id="newPageNameInput" class="form-input" placeholder="Page name (e.g. Profile)" style="flex:1">
+              <button class="btn btn-sm btn-primary" onclick="createPage()">Create</button>
+              <button class="btn btn-sm btn-secondary" onclick="hideAddPageForm()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Builds -->
+          <div class="app-view" data-appview="builds">
+            <div class="app-view-header">
+              <h2>Builds</h2>
+              <button class="btn btn-sm btn-primary" onclick="showBuildTrigger()" style="gap:6px;display:inline-flex;align-items:center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                New Build
+              </button>
+            </div>
+            <div id="appBuildsList">
+              <div class="loading"><span class="spinner"></span> Loading builds...</div>
+            </div>
+          </div>
+
+          <!-- Config -->
+          <div class="app-view" data-appview="config">
+            <div class="app-view-header">
+              <h2>Configuration</h2>
+              <div class="app-view-actions">
+                <button class="btn btn-sm btn-success" onclick="saveConfig()">Save Config</button>
+              </div>
+            </div>
+            <div id="appConfigForm" class="config-form">
+              <div class="loading"><span class="spinner"></span> Loading...</div>
+            </div>
+          </div>
+
+          <!-- Push Notifications -->
+          <div class="app-view" data-appview="push">
+            <div class="app-view-header">
+              <h2>Push Notifications</h2>
+              <button class="btn btn-sm btn-primary" style="display:flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Send Notification
+              </button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start;">
+              <div class="section-card" style="margin-top:0;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
+                <div class="section-card-header" style="background:var(--bg-surface);border-bottom:1px solid var(--border);padding:18px 24px;">
+                  <h3 style="display:flex;align-items:center;gap:8px;font-weight:700;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg> Compose Message</h3>
+                </div>
+                <div class="section-card-body" style="padding:24px;display:flex;flex-direction:column;gap:20px;">
+                  <div>
+                    <label style="display:block;font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Title</label>
+                    <input type="text" id="pushTitle" class="form-input" placeholder="Enter a catchy title" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:0.95rem;box-shadow:inset 0 2px 4px rgba(0,0,0,0.1);">
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Body Message</label>
+                    <textarea id="pushBody" class="form-input" placeholder="Type your message here..." style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:0.95rem;height:120px;resize:none;box-shadow:inset 0 2px 4px rgba(0,0,0,0.1);"></textarea>
+                  </div>
+                  <div style="padding-top:12px;">
+                    <button onclick="sendPushNotification()" class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;background:var(--bg-surface);box-shadow:0 4px 14px rgba(99,102,241,0.4);border:none;">Broadcast to Audience</button>
+                  </div>
+                </div>
+              </div>
+              <div class="section-card" style="margin-top:0;">
+                <div class="section-card-header">
+                  <h3>Recent Broadcasts</h3>
+                </div>
+                <div class="section-card-body">
+                  <div id="pushHistoryContainer">
+                    <div class="empty-state" style="padding:40px 20px;">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color:var(--text-muted);margin-bottom:12px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <p style="margin:0;">No recent history.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reusable Blocks -->
+          <div class="app-view" data-appview="blocks">
+            <div class="app-view-header">
+              <h2>Reusable Blocks</h2>
+              <button class="btn btn-sm btn-primary" style="display:flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Block
+              </button>
+            </div>
+            <div class="overview-grid" style="grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:24px;">
+              <div class="section-card" style="margin:0;cursor:pointer;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
+                <div style="height:140px;background:var(--bg-surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--primary);">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+                </div>
+                <div style="padding:16px 20px;">
+                  <h4 style="margin:0 0 6px;font-size:1.05rem;font-weight:600;">Hero Header</h4>
+                  <p style="margin:0;font-size:0.8rem;color:var(--text-secondary);">Used in 3 pages</p>
+                </div>
+              </div>
+              <div class="section-card" style="margin:0;cursor:pointer;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
+                <div style="height:140px;background:var(--bg-surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </div>
+                <div style="padding:16px 20px;">
+                  <h4 style="margin:0 0 6px;font-size:1.05rem;font-weight:600;">Product Carousel</h4>
+                  <p style="margin:0;font-size:0.8rem;color:var(--text-secondary);">Used in 1 page</p>
+                </div>
+              </div>
+              <div class="section-card" style="margin:0;border:1px dashed rgba(255,255,255,0.2);border-radius:16px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:216px;cursor:pointer;">
+                <div style="width:48px;height:48px;border-radius:50%;background:rgba(99,102,241,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+                <span style="font-size:0.95rem;font-weight:600;color:var(--text);">Create New</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Update App -->
+          <div class="app-view" data-appview="update-app">
+            <div class="app-view-header">
+              <h2>App Updates</h2>
+            </div>
+            <div class="overview-grid" style="grid-template-columns:1fr 1fr;gap:24px;">
+              <div class="section-card" style="margin-top:0;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:12px;padding:20px 24px;border-bottom:1px solid var(--border);background:var(--bg-surface);">
+                  <div style="color:var(--text);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                  <h3 style="font-size:1.1rem;font-weight:600;">iOS Build (.ipa)</h3>
+                </div>
+                <div class="section-card-body" style="padding:32px;text-align:center;display:flex;flex-direction:column;align-items:center;">
+                  <div style="width:64px;height:64px;border-radius:16px;background:rgba(14,165,233,0.1);display:flex;align-items:center;justify-content:center;color:var(--text);margin-bottom:20px;box-shadow:inset 0 0 0 1px rgba(14,165,233,0.2);">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </div>
+                  <p style="margin:0 0 24px;font-size:0.95rem;color:var(--text-secondary);font-weight:500;">Latest: <span style="color:var(--text);">v1.0.4 (Build 42)</span></p>
+                  <button class="btn" style="width:100%;border-radius:10px;background:rgba(14,165,233,0.1);color:var(--text);border:1px solid rgba(14,165,233,0.3);padding:12px;font-weight:600;">Download .ipa</button>
+                  <div style="margin-top:20px;font-size:0.85rem;font-weight:500;color:var(--primary);cursor:pointer;">View Build History &rarr;</div>
+                </div>
+              </div>
+              <div class="section-card" style="margin-top:0;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:12px;padding:20px 24px;border-bottom:1px solid var(--border);background:var(--bg-surface);">
+                  <div style="color:var(--text);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                  <h3 style="font-size:1.1rem;font-weight:600;">Android Build (.apk/.aab)</h3>
+                </div>
+                <div class="section-card-body" style="padding:32px;text-align:center;display:flex;flex-direction:column;align-items:center;">
+                  <div style="width:64px;height:64px;border-radius:16px;background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;color:var(--text);margin-bottom:20px;box-shadow:inset 0 0 0 1px rgba(16,185,129,0.2);">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </div>
+                  <p style="margin:0 0 24px;font-size:0.95rem;color:var(--text-secondary);font-weight:500;">Latest: <span style="color:var(--text);">v1.0.4 (Build 42)</span></p>
+                  <div style="display:flex;gap:12px;width:100%;">
+                    <button class="btn" style="flex:1;border-radius:10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);padding:12px;font-weight:600;">.apk</button>
+                    <button class="btn" style="flex:1;border-radius:10px;background:rgba(16,185,129,0.1);color:var(--text);border:1px solid rgba(16,185,129,0.3);padding:12px;font-weight:600;">.aab</button>
+                  </div>
+                  <div style="margin-top:20px;font-size:0.85rem;font-weight:500;color:var(--primary);cursor:pointer;">View Build History &rarr;</div>
+                </div>
+              </div>
+            </div>
+            <div class="section-card" style="border:1px solid rgba(99,102,241,0.3);background:var(--bg-surface);border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(99,102,241,0.15);">
+              <div class="section-card-body" style="padding:32px;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1;">
+                <div>
+                  <h4 style="margin:0 0 6px;font-size:1.15rem;font-weight:600;color:var(--text);">Trigger OTA Update</h4>
+                  <p style="margin:0;font-size:0.9rem;color:var(--text-secondary);">Push JavaScript & Asset changes directly to users' devices instantly without App Store review.</p>
+                </div>
+                <button class="btn btn-primary" onclick="triggerOtaUpdate()" style="padding:14px 28px;font-size:1rem;border-radius:12px;box-shadow:0 8px 24px rgba(99,102,241,0.4);">Publish OTA <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+              </div>
+            </div>
+            
+            <div class="section-card" style="margin-top:24px;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
+              <div class="section-card-header" style="padding:20px 24px;border-bottom:1px solid var(--border);">
+                <h3 style="font-size:1.1rem;font-weight:600;margin:0;">OTA Update History</h3>
+              </div>
+              <div class="section-card-body" style="padding:20px;" id="otaUpdatesList">
+                <div class="empty-state" style="padding:40px;text-align:center;color:var(--text-muted);">
+                  No OTA updates pushed yet.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Languages -->
+          <div class="app-view" data-appview="languages">
+            <div class="app-view-header">
+              <h2>Localization</h2>
+              <button class="btn btn-sm btn-primary" style="display:flex;align-items:center;gap:6px;" onclick="addLanguage()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Locale
+              </button>
+            </div>
+            <div class="section-card" style="margin-top:0;max-width:840px;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
+              <table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem;">
+                <thead>
+                  <tr style="background:var(--bg-input);border-bottom:1px solid var(--border);">
+                    <th style="padding:20px 24px;font-weight:600;color:var(--text-secondary);">Language</th>
+                    <th style="padding:20px 24px;font-weight:600;color:var(--text-secondary);">Code</th>
+                    <th style="padding:20px 24px;font-weight:600;color:var(--text-secondary);">Progress</th>
+                    <th style="padding:20px 24px;text-align:right;font-weight:600;color:var(--text-secondary);">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="languagesTableBody">
+                  <tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-muted);">Loading languages...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Subscription -->
+          <div class="app-view" data-appview="subscription">
+            <div class="app-view-header">
+              <h2>Billing &amp; Subscription</h2>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+              <div class="section-card" style="margin-top:0;border:1px solid rgba(99,102,241,0.5);background:var(--bg-surface);box-shadow:0 12px 32px rgba(99,102,241,0.15), inset 0 1px 0 var(--border);position:relative;overflow:hidden;border-radius:20px;">
+                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
+                <div style="position:absolute;top:20px;right:20px;background:rgba(99,102,241,0.15);color:var(--primary);border:1px solid rgba(99,102,241,0.3);font-size:0.7rem;font-weight:700;padding:6px 12px;border-radius:99px;text-transform:uppercase;letter-spacing:0.05em;">Current Plan</div>
+                <div class="section-card-body" style="padding:40px 32px;">
+                  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+                    <div style="width:48px;height:48px;border-radius:12px;background:var(--bg-surface);color:var(--primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(255,255,255,0.2);">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <h3 style="margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-0.01em;text-shadow:0 2px 4px var(--bg-input);">Pro Plan</h3>
+                  </div>
+                  <div style="font-size:3rem;font-weight:800;margin-bottom:8px;letter-spacing:-0.03em;color:var(--text);">$29<span style="font-size:1.2rem;font-weight:600;color:var(--text-secondary);-webkit-text-fill-color:var(--text-secondary);">/mo</span></div>
+                  <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 32px;line-height:1.5;">Billed monthly. Next invoice on Jun 1st.</p>
+                  <ul style="list-style:none;padding:0;margin:0 0 32px;font-size:0.95rem;display:flex;flex-direction:column;gap:16px;">
+                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Unlimited Pages</span></li>
+                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Premium Templates</span></li>
+                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">OTA Updates</span></li>
+                  </ul>
+                  <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;background:var(--bg-surface);box-shadow:0 6px 20px rgba(99,102,241,0.4);border:none;">Manage Billing</button>
+                </div>
+              </div>
+              <div class="section-card" style="margin-top:0;border:1px solid rgba(255,255,255,0.08);background:var(--bg-surface);border-radius:20px;">
+                <div class="section-card-body" style="padding:40px 32px;">
+                  <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+                    <div style="width:48px;height:48px;border-radius:12px;background:var(--bg-hover);color:var(--text);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                    </div>
+                    <h3 style="margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-0.01em;">Enterprise</h3>
+                  </div>
+                  <div style="font-size:3rem;font-weight:800;margin-bottom:8px;letter-spacing:-0.03em;">Custom</div>
+                  <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 32px;line-height:1.5;">For massive scale and dedicated support.</p>
+                  <ul style="list-style:none;padding:0;margin:0 0 32px;font-size:0.95rem;display:flex;flex-direction:column;gap:16px;color:var(--text-secondary);">
+                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span>Custom Integrations</span></li>
+                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span>Dedicated Account Manager</span></li>
+                    <li style="display:flex;align-items:center;gap:12px;"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span>SLA Guarantees</span></li>
+                  </ul>
+                  <button class="btn btn-outline" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;border:1px solid rgba(255,255,255,0.2);">Contact Sales</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Upload to Store -->
+          <div class="app-view" data-appview="upload">
+            <div class="app-view-header" style="flex-direction:column;align-items:flex-start;gap:8px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.05);">
+              <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+                <h2>Publish to Stores</h2>
+                <div style="display:flex;gap:12px;">
+                  <button class="btn btn-sm btn-outline" style="padding:10px 20px;border-radius:10px;font-weight:600;border-color:var(--border);" onclick="saveStoreCredentials()">
+                    Save Credentials
+                  </button>
+                  <button class="btn btn-sm btn-primary" style="padding:10px 20px;border-radius:10px;display:flex;align-items:center;gap:8px;font-weight:600;box-shadow:0 4px 12px rgba(99,102,241,0.3);" onclick="triggerStoreSubmit()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Build &amp; Submit
+                  </button>
+                </div>
+              </div>
+              <p style="color:var(--text-secondary);font-size:0.95rem;max-width:600px;margin:0;">Configure your developer account credentials to enable one-click deployments to Apple TestFlight and Google Play internal tracks directly from your dashboard.</p>
+            </div>
+            
+            <div class="overview-grid" style="grid-template-columns:1fr 1fr;gap:32px;margin-top:32px;">
+              
+              <!-- iOS Configuration Card -->
+              <div class="section-card" style="margin:0;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(180deg, var(--bg-surface) 0%, rgba(255,255,255,0.02) 100%);border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.15);">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:16px;padding:24px 32px;border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <div style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,0.05);color:var(--text);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(255,255,255,0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 13.9C16.4 10.4 19.3 8.7 19.4 8.6C17.7 6.2 15 5.9 14.1 5.8C11.9 5.6 9.8 7.1 8.6 7.1C7.5 7.1 5.7 5.8 4 5.9C1.8 5.9 0 7.2 -0.8 9C-2.5 12.6 -0.8 17.8 0.8 20.2C1.7 21.4 2.6 22.8 4.1 22.8C5.5 22.7 6 21.8 7.7 21.8C9.4 21.8 9.9 22.8 11.3 22.8C12.8 22.8 13.6 21.5 14.5 20.2C15.6 18.6 16 17.1 16 17C16 17 16.4 16.8 16.4 13.9ZM11.1 3.9C11.9 3 12.4 1.7 12.2 0.4C11.1 0.5 9.7 1.2 8.9 2.1C8.2 2.8 7.6 4.1 7.8 5.4C9 5.5 10.3 4.8 11.1 3.9Z"/></svg>
+                  </div>
+                  <div>
+                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">App Store Connect</h3>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);">iOS & iPadOS</div>
+                  </div>
+                </div>
+                <div class="section-card-body settings-form" style="padding:32px;">
+                  <div class="form-row" style="margin-bottom:24px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Issuer ID</label>
+                    <input type="text" id="storeIosIssuerId" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;font-size:0.95rem;transition:border-color 0.2s;" placeholder="e.g. 69a6de9e-3b54-47b3-... ">
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;">Found in App Store Connect &gt; Users and Access &gt; Keys</div>
+                  </div>
+                  <div class="form-row" style="margin-bottom:32px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Key ID</label>
+                    <input type="text" id="storeIosKeyId" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;font-size:0.95rem;transition:border-color 0.2s;" placeholder="e.g. 2B3C4D5E6F">
+                  </div>
+                  <div class="form-row" style="margin-bottom:0;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">AuthKey (.p8 file)</label>
+                    <div style="border:2px dashed rgba(255,255,255,0.15);border-radius:16px;padding:32px 24px;text-align:center;background:rgba(0,0,0,0.2);color:var(--text);cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;" onmouseover="this.style.borderColor='var(--primary)';this.style.background='rgba(99,102,241,0.05)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)';this.style.background='rgba(0,0,0,0.2)';">
+                      <div style="width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--text-secondary);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                      </div>
+                      <div style="font-size:0.95rem;font-weight:600;margin-bottom:6px;">Upload AuthKey.p8</div>
+                      <div style="font-size:0.8rem;color:var(--text-secondary);">Drag and drop or click to browse</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Android Configuration Card -->
+              <div class="section-card" style="margin:0;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(180deg, var(--bg-surface) 0%, rgba(255,255,255,0.02) 100%);border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.15);">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:16px;padding:24px 32px;border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <div style="width:48px;height:48px;border-radius:14px;background:rgba(16,185,129,0.1);color:#10b981;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(16,185,129,0.2);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M17.4 14.8L22 17.5C22.6 17.8 22.9 18.5 22.9 19.1C22.9 19.7 22.5 20.3 22 20.6L12.5 25.8C12.1 26 11.6 26.1 11.1 26.1L11.1 26C11 26 11 26 11.1 26.1C10.6 26.1 10 26 9.6 25.8L0.1 20.6C-0.3 20.3 -0.6 19.7 -0.6 19.1C-0.6 18.5 -0.3 17.8 0.1 17.5L4.7 14.8L11.1 18.4L17.4 14.8ZM11.1 15.6L1.5 10.3C1.1 10 0.8 9.5 0.8 8.9C0.8 8.3 1.1 7.8 1.5 7.5L11.1 2.2C11.6 1.9 12 1.9 12.5 2.2L22 7.5C22.4 7.8 22.7 8.3 22.7 8.9C22.7 9.5 22.4 10 22 10.3L12.5 15.6C12 15.9 11.5 15.9 11.1 15.6Z" transform="translate(0, -2)"/></svg>
+                  </div>
+                  <div>
+                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">Google Play Console</h3>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);">Android</div>
+                  </div>
+                </div>
+                <div class="section-card-body settings-form" style="padding:32px;">
+                  <div style="background:rgba(245,158,11,0.1);border-left:4px solid #f59e0b;padding:16px;border-radius:8px;margin-bottom:32px;">
+                    <div style="font-size:0.85rem;font-weight:600;color:#fcd34d;margin-bottom:6px;">Initial Upload Required</div>
+                    <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;">Your first Android app bundle (.aab) must be uploaded manually through the Google Play Console UI before automated submissions can begin.</div>
+                  </div>
+                  <div class="form-row" style="margin-bottom:0;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Service Account Key (.json)</label>
+                    <div style="border:2px dashed rgba(255,255,255,0.15);border-radius:16px;padding:52px 24px;text-align:center;background:rgba(0,0,0,0.2);color:var(--text);cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;" onmouseover="this.style.borderColor='#10b981';this.style.background='rgba(16,185,129,0.05)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)';this.style.background='rgba(0,0,0,0.2)';">
+                      <div style="width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--text-secondary);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                      </div>
+                      <div style="font-size:0.95rem;font-weight:600;margin-bottom:6px;">Upload JSON Key</div>
+                      <div style="font-size:0.8rem;color:var(--text-secondary);">Ensure the account has 'Release Manager' permissions</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+            </div>
+          </div>
+
+          <!-- Settings -->
+          <div class="app-view" data-appview="settings">
+            <div class="app-view-header">
+              <h2>App Settings</h2>
+              <button class="btn btn-sm btn-success" style="padding:8px 20px;border-radius:6px;font-weight:600;" onclick="saveAppSettings()">Save Changes</button>
+            </div>
+            <div class="section-card" style="margin-top:0;max-width:640px;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
+              <div class="section-card-body settings-form" style="padding:32px;">
+                <div style="display:flex;align-items:center;gap:24px;margin-bottom:32px;padding-bottom:32px;border-bottom:1px solid rgba(255,255,255,0.08);">
+                  <div style="width:84px;height:84px;border-radius:20px;background:var(--bg-input);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--primary);cursor:pointer;position:relative;overflow:hidden;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  </div>
+                  <div>
+                    <h3 style="margin:0 0 6px;font-size:1.15rem;font-weight:600;">App Icon</h3>
+                    <p style="margin:0 0 12px;font-size:0.85rem;color:var(--text-secondary);">Recommended size: 1024x1024px PNG.</p>
+                    <button class="btn btn-sm btn-outline" style="font-size:0.85rem;padding:6px 16px;border-radius:8px;border-color:var(--border);">Upload Image</button>
+                  </div>
+                </div>
+                <div class="form-row" style="margin-bottom:24px;">
+                  <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">App Name</label>
+                  <input type="text" id="pageEditAppName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;">
+                  <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">As it appears on the home screen</div>
+                </div>
+                <div class="form-row" style="margin-bottom:24px;">
+                  <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Display Name (Internal)</label>
+                  <input type="text" id="pageEditDisplayName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;">
+                </div>
+                <div class="form-row" style="margin-bottom:24px;">
+                  <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Package Name / Bundle ID</label>
+                  <input type="text" id="pageEditPackageName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:monospace;font-size:0.9rem;"   placeholder="com.example.app">
+                </div>
+                <div class="form-row" style="margin-bottom:0;">
+                  <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Version Name</label>
+                  <input type="text" id="pageEditVersion" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;"   placeholder="1.0.0">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Integrations -->
+          <div class="app-view" data-appview="integrations">
+            <div class="app-view-header" style="flex-direction:column;align-items:flex-start;gap:8px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.05);">
+              <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+                <h2>E-Commerce Integrations</h2>
+                <button class="btn btn-sm btn-primary" style="padding:10px 20px;border-radius:10px;font-weight:600;" onclick="saveIntegrations()">Save Connections</button>
+              </div>
+              <p style="color:var(--text-secondary);font-size:0.95rem;max-width:600px;margin:0;">Connect your headless store via API to populate your app with native product grids and carts.</p>
+            </div>
+            <div class="overview-grid" style="grid-template-columns:1fr 1fr;gap:32px;margin-top:32px;">
+              <!-- Shopify -->
+              <div class="section-card" style="margin:0;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(180deg, var(--bg-surface) 0%, rgba(255,255,255,0.02) 100%);border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.15);">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:16px;padding:24px 32px;border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <div style="width:48px;height:48px;border-radius:14px;background:rgba(150,191,72,0.1);color:#96bf48;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(150,191,72,0.2);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                  </div>
+                  <div>
+                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">Shopify</h3>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);">Storefront API</div>
+                  </div>
+                </div>
+                <div class="section-card-body settings-form" style="padding:32px;">
+                  <div class="form-row" style="margin-bottom:24px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Shop Domain</label>
+                    <input type="text" id="integShopifyDomain" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="e.g. my-store.myshopify.com">
+                  </div>
+                  <div class="form-row" style="margin-bottom:0;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Storefront Access Token</label>
+                    <input type="text" id="integShopifyToken" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="e.g. shpat_...">
+                  </div>
+                </div>
+              </div>
+              <!-- WooCommerce -->
+              <div class="section-card" style="margin:0;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(180deg, var(--bg-surface) 0%, rgba(255,255,255,0.02) 100%);border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.15);">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:16px;padding:24px 32px;border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <div style="width:48px;height:48px;border-radius:14px;background:rgba(150,88,138,0.1);color:#96588a;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(150,88,138,0.2);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.9V17L12 22l-9-4.9V7z"></path></svg>
+                  </div>
+                  <div>
+                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">WooCommerce</h3>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);">REST API V3</div>
+                  </div>
+                </div>
+                <div class="section-card-body settings-form" style="padding:32px;">
+                  <div class="form-row" style="margin-bottom:24px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Store URL</label>
+                    <input type="text" id="integWooUrl" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="e.g. https://my-store.com">
+                  </div>
+                  <div class="form-row" style="margin-bottom:24px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Consumer Key</label>
+                    <input type="text" id="integWooKey" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="ck_...">
+                  </div>
+                  <div class="form-row" style="margin-bottom:0;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Consumer Secret</label>
+                    <input type="text" id="integWooSecret" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="cs_...">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Extensions -->
+          <div class="app-view" data-appview="extensions">
+            <div class="app-view-header">
+              <h2>Extensions Marketplace</h2>
+            </div>
+            <div class="overview-grid" style="grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:24px;">
+              <div class="section-card" style="margin-top:0;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
+                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
+                <div class="section-card-body" style="padding:28px 24px;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+                    <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:#fbbf24;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M11.6 1.1L3.9 14.3H10L9.4 22.9L19.3 9.4H12.9L14.7 1.1H11.6Z"/></svg>
+                    </div>
+                    <span style="font-size:0.7rem;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(245,158,11,0.15);color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em;border:1px solid rgba(245,158,11,0.2);">Installed</span>
+                  </div>
+                  <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">Firebase</h4>
+                  <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Add powerful backend services including Authentication, Firestore Database, and Cloud Storage.</p>
+                  <button class="btn btn-sm btn-outline" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;border-color:var(--border);">Configure Plugin</button>
+                </div>
+              </div>
+              
+              <div class="section-card" style="margin-top:0;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
+                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
+                <div class="section-card-body" style="padding:28px 24px;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+                    <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:var(--primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                    </div>
+                  </div>
+                  <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">Stripe Payments</h4>
+                  <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Accept credit cards, Apple Pay, and Google Pay directly inside your app securely.</p>
+                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:var(--bg-surface);color:#fff;border:none;box-shadow:0 4px 12px rgba(99,102,241,0.3);">Install Extension</button>
+                </div>
+              </div>
+
+              <div class="section-card" style="margin-top:0;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
+                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
+                <div class="section-card-body" style="padding:28px 24px;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+                    <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:#34d399;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                    </div>
+                  </div>
+                  <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">PostHog Analytics</h4>
+                  <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Track user behavior, measure feature engagement, and analyze conversion funnels.</p>
+                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:var(--bg-surface);color:#fff;border:none;box-shadow:0 4px 12px rgba(16,185,129,0.3);">Install Extension</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Themes -->
+          <div class="app-view" data-appview="themes">
+            <div class="app-view-header">
+              <h2>Appearance &amp; Themes</h2>
+              <button class="btn btn-sm btn-success" style="padding:8px 20px;border-radius:6px;font-weight:600;" onclick="saveThemeSettings()">Save Theme</button>
+            </div>
+            <div class="section-card" style="margin-top:0;border:1px solid var(--border);background:var(--bg-surface);border-radius:20px;overflow:hidden;">
+              <div class="section-card-body settings-form" style="padding:40px;display:flex;gap:60px;">
+                <div style="flex:1;">
+                  <h3 style="margin:0 0 32px;font-size:1.2rem;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:16px;letter-spacing:-0.01em;">Global Branding</h3>
+                  <div class="form-row">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:12px;">Primary Brand Color</label>
+                    <div style="display:flex;gap:16px;align-items:center;">
+                      <div style="width:56px;height:56px;border-radius:12px;overflow:hidden;border:2px solid var(--border);padding:3px;background:var(--bg-hover);position:relative;">
+                        <input type="color" id="themePrimaryColor" value="#6366f1" style="position:absolute;top:-10px;left:-10px;width:100px;height:100px;border:none;cursor:pointer;" onchange="updateThemePreview()">
+                      </div>
+                      <input type="text" id="themePrimaryColorHex" class="form-input" style="flex:1;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;font-size:1rem;" value="#6366f1" onchange="updateThemePreview(true)">
+                    </div>
+                  </div>
+                  <div class="form-row" style="margin-top:32px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:12px;">Typography / Font Family</label>
+                    <select id="themeFontFamily" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:0.95rem;cursor:pointer;appearance:none;" onchange="updateThemePreview()">
+                      <option value="system">System Default (San Francisco / Roboto)</option>
+                      <option value="Inter">Inter</option>
+                      <option value="Poppins">Poppins</option>
+                      <option value="Outfit">Outfit</option>
+                      <option value="DM Sans">DM Sans</option>
+                    </select>
+                  </div>
+                  <div class="form-row" style="margin-top:32px;">
+                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:12px;">Border Radius (Buttons &amp; Cards)</label>
+                    <div style="display:flex;align-items:center;gap:20px;">
+                      <input type="range" id="themeBorderRadius" min="0" max="24" value="8" style="flex:1;accent-color:var(--primary);cursor:pointer;height:6px;background:var(--border);border-radius:3px;appearance:none;" oninput="updateThemePreview()">
+                      <span id="themeBorderRadiusVal" style="font-family:monospace;font-size:0.95rem;font-weight:600;color:var(--primary);background:rgba(99,102,241,0.1);padding:4px 10px;border-radius:6px;border:1px solid rgba(99,102,241,0.2);">8px</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:0 0 320px;position:relative;">
+                  <div style="background:#e5e7eb;border-radius:44px;padding:2px;height:640px;position:relative;box-shadow:0 12px 40px rgba(0,0,0,0.1), inset 0 2px 4px rgba(255,255,255,0.5);">
+                    <!-- Power Button -->
+                    <div style="position:absolute;right:-4px;top:120px;width:4px;height:50px;background:#d1d5db;border-radius:0 4px 4px 0;"></div>
+                    <!-- Volume Buttons -->
+                    <div style="position:absolute;left:-4px;top:100px;width:4px;height:30px;background:#d1d5db;border-radius:4px 0 0 4px;"></div>
+                    <div style="position:absolute;left:-4px;top:140px;width:4px;height:50px;background:#d1d5db;border-radius:4px 0 0 4px;"></div>
+                    <div style="position:absolute;left:-4px;top:200px;width:4px;height:50px;background:#d1d5db;border-radius:4px 0 0 4px;"></div>
+                    
+                    <div style="background:#000;border-radius:42px;padding:12px;height:100%;box-shadow:inset 0 0 0 2px #374151;">
+                      <div id="themePreviewContainer" style="background:#fff;border-radius:30px;height:100%;overflow:hidden;display:flex;flex-direction:column;color:#111;position:relative;">
+                        <!-- Dynamic Island -->
+                        <div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);width:90px;height:24px;background:#000;border-radius:12px;z-index:20;"></div>
+                        <!-- Status Bar -->
+                        <div style="height:44px;background:var(--bg-surface);display:flex;justify-content:space-between;align-items:center;padding:0 24px;font-size:0.75rem;font-weight:600;color:var(--text);border-bottom:1px solid #f4f4f5;">
+                          <span>9:41</span>
+                          <div style="display:flex;gap:4px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                          </div>
+                        </div>
+
+                        <div style="padding:40px 24px 24px;text-align:center;border-bottom:1px solid #f4f4f5;background:var(--bg-surface);">
+                          <h4 style="margin:0;font-size:1.3rem;font-weight:800;letter-spacing:-0.02em;">Welcome Back</h4>
+                          <p style="margin:6px 0 0;font-size:0.85rem;color:#71717a;">Sign in to continue</p>
+                        </div>
+                        <div style="padding:32px 24px;display:flex;flex-direction:column;gap:16px;background:var(--bg-surface);flex:1;">
+                          <div id="themePreviewInput1" style="height:48px;background:var(--bg-input);border-radius:8px;display:flex;align-items:center;padding:0 16px;font-size:0.85rem;color:var(--text-secondary);border:1px solid var(--border);">Email address</div>
+                          <div id="themePreviewInput2" style="height:48px;background:var(--bg-input);border-radius:8px;display:flex;align-items:center;padding:0 16px;font-size:0.85rem;color:var(--text-secondary);border:1px solid var(--border);">Password</div>
+                          <button id="themePreviewBtn" style="height:52px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;margin-top:12px;box-shadow:0 4px 12px rgba(99,102,241,0.3);">Sign In</button>
+                          <p id="themePreviewLink" style="text-align:center;font-size:0.8rem;font-weight:500;color:#6366f1;margin:8px 0 0;cursor:pointer;">Forgot password?</p>
+                        </div>
+                        
+                        <!-- Home Indicator -->
+                        <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:120px;height:5px;background:#d4d4d8;border-radius:10px;"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>App Settings</h3>
+        <button class="modal-close" onclick="closeModal('settingsModal')">&times;</button>
+      </div>
+      <div class="modal-body settings-form">
+        <div class="form-row">
+          <label for="editAppName">App Name</label>
+          <input type="text" id="editAppName" class="form-input">
+        </div>
+        <div class="form-row">
+          <label for="editDisplayName">Display Name</label>
+          <input type="text" id="editDisplayName" class="form-input">
+        </div>
+        <div class="form-row">
+          <label for="editPackageName">Package Name</label>
+          <input type="text" id="editPackageName" class="form-input">
+        </div>
+        <div class="form-row">
+          <label for="editVersion">Version</label>
+          <input type="text" id="editVersion" class="form-input">
+        </div>
+        <div class="form-row" style="margin-bottom:0">
+          <button class="btn btn-primary" onclick="saveAppSettings()" style="width:100%">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirmModal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="confirmTitle">Confirm</h3>
+        <button class="modal-close" onclick="closeModal('confirmModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage" style="color:var(--text-secondary);margin:0 0 20px">Are you sure?</p>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancel</button>
+          <button class="btn btn-danger" id="confirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <script src="app-dashboard.js"></script>
+</body>
+</html>

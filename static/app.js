@@ -61,7 +61,61 @@ document.getElementById('confirmModal').addEventListener('click', e => {
 
 // ── View Switching ──
 
+// ── Theme Toggle ──
+
+function getTheme() {
+  return localStorage.getItem('apt_theme') || 'dark';
+}
+
+function setTheme(name) {
+  document.documentElement.setAttribute('data-theme', name);
+  localStorage.setItem('apt_theme', name);
+  const icon = document.getElementById('themeIcon');
+  if (!icon) return;
+  icon.innerHTML = name === 'light'
+    ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+    : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+}
+
+function toggleTheme() {
+  setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+}
+
+window.toggleTheme = toggleTheme;
+
+// Init theme after DOM ready
+function initTheme() {
+  setTheme(getTheme());
+  document.getElementById('themeToggle')?.addEventListener('click', function(e) {
+    e.preventDefault();
+    toggleTheme();
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initTheme);
+} else {
+  initTheme();
+}
+
+// Listen for save command from parent dashboard iframe
+window.addEventListener('message', (e) => {
+  if (e.data === 'save') {
+    const btn = document.getElementById('builderSaveBtn') || document.querySelector('.builder-toolbar .btn-success');
+    if (btn) btn.click();
+    else saveBuilderChanges();
+  }
+});
+
 function switchView(name) {
+    // Special handling: if entering app-dashboard, hide sidebar + header for full-page look
+    if (name === 'app-dashboard') {
+        document.querySelector('.sidebar').style.display = 'none';
+        document.getElementById('mainHeader').style.display = 'none';
+    } else {
+        document.querySelector('.sidebar').style.display = '';
+        document.getElementById('mainHeader').style.display = '';
+    }
+
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + name).classList.add('active');
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -90,6 +144,8 @@ function switchView(name) {
         actions.innerHTML = '<button class="btn btn-secondary" onclick="switchView(\'apps\')">' +
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>' +
             'Back</button>';
+    } else if (name === 'app-dashboard') {
+        actions.innerHTML = '';
     } else {
         actions.innerHTML = '<button class="btn btn-secondary" onclick="switchView(\'apps\')">' +
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>' +
@@ -103,7 +159,7 @@ function switchView(name) {
     if (name === 'apps') loadApps();
     if (name === 'builds') loadAllBuilds();
     if (name === 'builder' && !builderAppId) {
-        headerSubtitle.textContent = 'Select an app to edit';
+        document.getElementById('headerSubtitle').textContent = 'Select an app to edit';
     }
 }
 window.switchView = switchView;
@@ -975,15 +1031,17 @@ document.getElementById('appForm').addEventListener('submit', async (e) => {
     btn.textContent = editId ? 'Updating...' : 'Generating...';
 
     try {
+        let newAppId;
         if (editId) {
             await api('PUT', '/apps/' + editId, data);
-            toast('App updated!');
+            newAppId = editId;
         } else {
-            await api('POST', '/generate', data);
-            toast('App created!');
+            const res = await api('POST', '/generate', data);
+            newAppId = res.app_id;
         }
         resetForm();
         switchView('apps');
+        showSuccessModal(newAppId, editId ? 'App Updated!' : 'App Created!');
     } catch (err) {
         toast(err.message, 'error');
     } finally {
@@ -991,6 +1049,22 @@ document.getElementById('appForm').addEventListener('submit', async (e) => {
         btn.textContent = editId ? 'Update App' : 'Generate App';
     }
 });
+
+function showSuccessModal(appId, title) {
+    const titleEl = document.getElementById('successTitle');
+    const openBtn = document.getElementById('successOpenBtn');
+    const modal = document.getElementById('successModal');
+    if (!titleEl || !openBtn || !modal) {
+        toast('App created! (refresh to open)', 'success');
+        return;
+    }
+    titleEl.textContent = title;
+    openBtn.onclick = function () {
+        closeModal('successModal');
+        navigateToApp(appId);
+    };
+    modal.classList.remove('hidden');
+}
 
 function resetForm() {
     document.getElementById('appForm').reset();
@@ -1042,7 +1116,7 @@ function renderAppCard(a) {
     const cfg = a.config || {};
     const primary = cfg.primary_color || '#7c5cfc';
 
-    return '<div class="app-card" onclick="viewAppDetails(\'' + a.id + '\')" style="--card-primary:' + primary + '">' +
+    return '<div class="app-card" onclick="navigateToApp(\'' + a.id + '\')" style="--card-primary:' + primary + '">' +
         '<div class="app-card-header">' +
         '<div class="app-card-header-name">' + esc(cfg.display_name || cfg.app_name || a.app_name) + '</div>' +
         '</div>' +
@@ -1058,7 +1132,7 @@ function renderAppCard(a) {
         '</div>' +
         '<div class="app-card-footer">' +
         '<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openPreview(\'' + a.id + '\')">Preview</button>' +
-        '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();viewAppDetails(\'' + a.id + '\')">Details</button>' +
+        '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();navigateToApp(\'' + a.id + '\')">Open</button>' +
         '</div>' +
         '</div>';
 }
@@ -1384,9 +1458,13 @@ function renderPhoneScreen() {
     const surface = mode === 'dark' ? (theme.surfaceColor || '#1e293b') : (theme.surfaceColor || '#ffffff');
     const text = mode === 'dark' ? (theme.textColor || '#e2e8f0') : (theme.textColor || '#0f172a');
 
+    const container = document.querySelector('.phone-screen-container');
+    if (container) {
+      container.style.setProperty('--phone-primary', primary);
+      container.style.setProperty('--phone-bg', bg);
+      container.style.setProperty('--phone-text', text);
+    }
     screen.style.setProperty('--phone-primary', primary);
-    screen.style.setProperty('--phone-bg', bg);
-    screen.style.setProperty('--phone-text', text);
     screen.className = 'phone-screen' + (mode === 'dark' ? ' theme-dark' : '');
 
     document.getElementById('previewPageName').textContent = page ? page.name : '';
@@ -1401,11 +1479,20 @@ function renderPhoneScreen() {
         return;
     }
 
-    const container = document.createElement('div');
-    container.style.cssText = 'padding:12px;display:flex;flex-direction:column;gap:8px;min-height:100%;color:' + text;
+    // iOS nav bar
+    const navBar = document.createElement('div');
+    navBar.style.cssText = 'position:sticky;top:0;z-index:10;background:' + (mode === 'dark' ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)') + ';-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:0.5px solid ' + (mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(60,60,67,0.12)') + ';padding:8px 16px 10px;text-align:center';
+    const navTitle = document.createElement('div');
+    navTitle.style.cssText = 'font-size:16px;font-weight:600;letter-spacing:-0.02em;color:' + text;
+    navTitle.textContent = page.name || 'Screen';
+    navBar.appendChild(navTitle);
+    screen.appendChild(navBar);
+
+    const contentEl = document.createElement('div');
+    contentEl.style.cssText = 'padding:12px;display:flex;flex-direction:column;gap:12px;min-height:100%;color:' + text;
 
     page.elements.forEach(el => {
-        renderElement(el, container, previewState.stateValues, {
+        renderElement(el, contentEl, previewState.stateValues, {
             pages: previewState.pages,
             collections: previewState.collections,
             globalStates: previewState.globalStates,
@@ -1414,7 +1501,7 @@ function renderPhoneScreen() {
     });
 
     screen.innerHTML = '';
-    screen.appendChild(container);
+    screen.appendChild(contentEl);
 }
 
 function renderElement(el, parent, state, ctx) {
@@ -1467,24 +1554,26 @@ function renderElement(el, parent, state, ctx) {
             elm.className = 'sim-heading';
             const hTag = document.createElement('h2');
             hTag.textContent = evalInterpolation(props.value || 'Title', state);
-            hTag.style.cssText = 'font-size:18px;font-weight:700;margin:0;color:' + (el.styles?.color || ctx.text);
+            hTag.style.cssText = 'font-size:20px;font-weight:700;margin:0;letter-spacing:-0.03em;color:' + (el.styles?.color || ctx.text);
             elm.appendChild(hTag);
             break;
         case 'text':
             elm.className = 'sim-text';
             const p = document.createElement('p');
             p.textContent = evalInterpolation(props.value || 'Text', state);
-            p.style.cssText = 'font-size:14px;margin:0;line-height:1.5;color:' + (el.styles?.color || ctx.text);
+            p.style.cssText = 'font-size:15px;margin:0;line-height:1.5;color:' + (el.styles?.color || ctx.text);
             elm.appendChild(p);
             break;
         case 'divider':
             elm.className = 'sim-divider';
+            elm.style.cssText = 'height:0.5px;background:' + (ctx.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(60,60,67,0.12)') + ';margin:4px 0';
             break;
         case 'image':
             const img = document.createElement('img');
             img.className = 'sim-image';
             img.src = props.src || '';
             img.alt = '';
+            img.style.cssText = 'width:100%;border-radius:12px;';
             elm.appendChild(img);
             break;
         case 'video':
@@ -1493,6 +1582,17 @@ function renderElement(el, parent, state, ctx) {
             vid.src = props.src || '';
             vid.controls = true;
             elm.appendChild(vid);
+            break;
+        case 'card':
+            elm.className = 'sim-card';
+            elm.style.cssText = 'background:' + ctx.surface + ';border-radius:12px;padding:16px;border:0.5px solid ' + (ctx.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(60,60,67,0.12)');
+            (el.children || []).forEach(child => renderElement(child, elm, state, ctx));
+            break;
+        case 'row':
+        case 'columns':
+            elm.className = 'sim-row';
+            elm.style.cssText = 'display:flex;gap:12px';
+            (el.children || []).forEach(child => renderElement(child, elm, state, ctx));
             break;
         case 'icon':
             elm.className = 'sim-icon';
@@ -1795,6 +1895,186 @@ function getIconSvg(name, size) {
     return icons[name] || icons.Heart;
 }
 
+// ── App Dashboard ──
+
+let currentAppId = null;
+
+function navigateToApp(appId) {
+    window.open('/app-dashboard.html?id=' + appId, '_blank');
+}
+
+window.navigateToApp = navigateToApp;
+
+function exitAppDashboard() {
+    currentAppId = null;
+    if (builderAppId) {
+        builderAppId = null;
+    }
+    switchView('apps');
+}
+
+window.exitAppDashboard = exitAppDashboard;
+
+function switchAppView(view) {
+    document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
+    document.querySelector('.app-view[data-appview="' + view + '"]')?.classList.add('active');
+    document.querySelectorAll('.app-nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelector('.app-nav-item[data-appview="' + view + '"]')?.classList.add('active');
+
+    // Load data for specific views
+    if (view === 'builds' && currentAppId) {
+        loadAppBuilds(currentAppId);
+    }
+}
+
+window.switchAppView = switchAppView;
+
+async function loadAppDashboard(appId) {
+    try {
+        const app = await api('GET', '/apps/' + appId);
+        const cfg = app.config || {};
+        const name = cfg.display_name || cfg.app_name || app.app_name || 'App';
+        const slug = cfg.app_name || app.app_name || 'app';
+        const avatar = (name.charAt(0) || 'A').toUpperCase();
+
+        document.getElementById('appDashboardName').textContent = name;
+        document.getElementById('appDashboardAvatar').textContent = avatar;
+        document.getElementById('appDashboardSlug').textContent = slug;
+
+        // Populate overview
+        const overviewActions = document.getElementById('overviewActions');
+        overviewActions.innerHTML =
+            '<button class="btn btn-sm btn-primary" onclick="openPreview(\'' + appId + '\')">Preview</button>' +
+            '<button class="btn btn-sm btn-accent" onclick="openAppBuilder(\'' + appId + '\')">Builder</button>' +
+            '<button class="btn btn-sm btn-success" onclick="publishConfig(\'' + appId + '\')">Publish</button>' +
+            '<button class="btn btn-sm btn-warning" onclick="buildApp(\'' + appId + '\')">Build APK</button>' +
+            '<a href="' + API + '/apps/' + appId + '/download" class="btn btn-sm btn-success">Download</a>';
+
+        const infoCard = document.getElementById('appInfoCard');
+        infoCard.innerHTML =
+            '<div class="app-info-row"><span class="label">App Name</span><span class="value">' + esc(cfg.app_name || '-') + '</span></div>' +
+            '<div class="app-info-row"><span class="label">Display Name</span><span class="value">' + esc(cfg.display_name || '-') + '</span></div>' +
+            '<div class="app-info-row"><span class="label">Package</span><span class="value">' + esc(cfg.package_name || '-') + '</span></div>' +
+            '<div class="app-info-row"><span class="label">Version</span><span class="value">' + esc(cfg.version || '-') + '</span></div>' +
+            '<div class="app-info-row"><span class="label">App ID</span><span class="value" style="font-size:0.78rem;font-family:monospace">' + esc(app.id) + '</span></div>' +
+            '<div class="app-info-row"><span class="label">Created</span><span class="value">' + formatDate(app.created_at) + '</span></div>';
+
+        const quickActions = document.getElementById('appQuickActions');
+        quickActions.innerHTML =
+            '<button class="btn btn-outline" onclick="editApp(\'' + appId + '\')">Edit Config</button>' +
+            '<button class="btn btn-outline" onclick="deleteApp(\'' + appId + '\')" style="color:var(--danger)">Delete App</button>';
+
+        // Load pages
+        loadAppPages(appId);
+
+        // Load config form
+        loadAppConfigForm(appId);
+
+    } catch (err) {
+        toast('Failed to load app: ' + err.message, 'error');
+    }
+}
+
+async function loadAppPages(appId) {
+    const container = document.getElementById('appPagesList');
+    try {
+        const app = await api('GET', '/apps/' + appId);
+        const pc = (app.config || {}).project_config || {};
+        const pages = pc.pages || [];
+
+        if (!pages.length) {
+            container.innerHTML = '<div class="empty-state"><h3>No pages yet</h3><p>Add pages to your app to get started</p></div>';
+            return;
+        }
+
+        container.innerHTML = pages.map(p => {
+            const blockCount = (p.elements || []).length;
+            return '<div class="app-page-item">' +
+                '<div><div class="page-name">' + esc(p.name || 'Unnamed') + '</div><div class="page-blocks">' + blockCount + ' block' + (blockCount !== 1 ? 's' : '') + '</div></div>' +
+                '<div class="page-actions">' +
+                '<button class="btn btn-sm btn-secondary" onclick="openAppBuilder(\'' + appId + '\');switchView(\'builder\')">Edit</button>' +
+                '</div></div>';
+        }).join('');
+    } catch (err) {
+        container.innerHTML = '<div class="empty-state"><p>Failed to load pages</p></div>';
+    }
+}
+
+async function loadAppBuilds(appId) {
+    const container = document.getElementById('appBuildsList');
+    try {
+        const builds = await api('GET', '/apps/' + appId + '/builds');
+        if (!builds.length) {
+            container.innerHTML = '<div class="empty-state"><h3>No builds yet</h3><p>Trigger a build to generate your APK</p></div>';
+            return;
+        }
+        container.innerHTML = builds.map(b =>
+            '<div class="build-item">' +
+            '<div class="build-item-left">' +
+            '<span class="build-status ' + (b.status || 'unknown') + '">' + esc(b.status || 'Unknown') + '</span>' +
+            '<span class="build-info">' + esc(b.platform || 'android') + ' — v' + esc(b.version || '?') + '</span>' +
+            '</div>' +
+            '<div class="build-item-right">' +
+            '<span class="build-date">' + formatDate(b.created_at) + '</span>' +
+            (b.download_url ? '<a href="' + esc(b.download_url) + '" class="btn btn-sm btn-success">Download</a>' : '') +
+            '</div></div>'
+        ).join('');
+    } catch (err) {
+        container.innerHTML = '<div class="empty-state"><p>Failed to load builds</p></div>';
+    }
+}
+
+async function loadAppConfigForm(appId) {
+    const container = document.getElementById('appConfigForm');
+    try {
+        const app = await api('GET', '/apps/' + appId);
+        const cfg = app.config || {};
+        container.innerHTML =
+            '<div class="form-group"><label for="appConfigJson">Config JSON</label>' +
+            '<textarea id="appConfigJson">' + esc(JSON.stringify(cfg, null, 2)) + '</textarea></div>' +
+            '<p style="font-size:0.78rem;color:var(--text-muted)">Edit the config JSON directly. Be careful — invalid JSON will be rejected.</p>';
+    } catch (err) {
+        container.innerHTML = '<div class="empty-state"><p>Failed to load config</p></div>';
+    }
+}
+
+function appDashboardAddPage() {
+    if (!currentAppId) return;
+    openAppBuilder(currentAppId);
+    switchView('builder');
+    // Add a page after builder loads
+    setTimeout(() => {
+        builderAddPage('New Page');
+    }, 500);
+}
+
+window.appDashboardAddPage = appDashboardAddPage;
+
+async function appDashboardTriggerBuild() {
+    if (!currentAppId) { toast('No app selected', 'error'); return; }
+    await buildApp(currentAppId);
+    if (document.querySelector('.app-view[data-appview="builds"].active')) {
+        loadAppBuilds(currentAppId);
+    }
+}
+
+window.appDashboardTriggerBuild = appDashboardTriggerBuild;
+
+async function appDashboardSaveConfig() {
+    if (!currentAppId) { toast('No app selected', 'error'); return; }
+    const textarea = document.getElementById('appConfigJson');
+    if (!textarea) return;
+    try {
+        const config = JSON.parse(textarea.value);
+        await api('PUT', '/apps/' + currentAppId, { config });
+        toast('Config saved!');
+    } catch (err) {
+        toast('Invalid JSON: ' + err.message, 'error');
+    }
+}
+
+window.appDashboardSaveConfig = appDashboardSaveConfig;
+
 // ── Standalone App Builder ──
 
 let builderAppId = null;
@@ -1834,7 +2114,11 @@ window.openAppBuilder = openAppBuilder;
 
 function exitBuilder() {
     builderAppId = null;
-    switchView('apps');
+    if (currentAppId) {
+        switchView('app-dashboard');
+    } else {
+        switchView('apps');
+    }
 }
 
 window.exitBuilder = exitBuilder;
@@ -2250,3 +2534,18 @@ goToStep(1);
 updateColorPreview();
 checkAuth();
 loadApps();
+
+// Handle URL params: ?builder=xxx or ?edit=xxx
+const urlParams = new URLSearchParams(window.location.search);
+const builderId = urlParams.get('builder');
+const editId_param = urlParams.get('edit');
+const isEmbedded = urlParams.get('embedded') === '1';
+if (isEmbedded) {
+    document.body.classList.add('builder-embedded');
+}
+if (builderId) {
+    openAppBuilder(builderId);
+    switchView('builder');
+} else if (editId_param) {
+    editApp(editId_param);
+}

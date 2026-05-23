@@ -14,7 +14,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 zip = "0.6"
 tempfile = "3.8"
 handlebars = "5.1"
-qrcode = "0.14"
+qrcode = { version = "0.14", features = ["svg"] }
 base64 = "0.21"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"

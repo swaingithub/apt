@@ -127,6 +127,7 @@ pub struct ProjectResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BuildRequest {
     pub platform: String, // "android" or "ios"
+    #[serde(default)]
     pub app_id: String,
 }
 
