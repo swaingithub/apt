@@ -84,27 +84,37 @@
                     <label>What kind of app are you building?</label>
                     <div class="purpose-grid" id="purposeGrid">
                       <div class="purpose-card" data-purpose="business" onclick="selectPurpose('business')">
-                        <span class="purpose-icon">💼</span>
+                        <span class="purpose-icon">
+                          <svg class="purpose-svg" viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                        </span>
                         <div class="purpose-name">Business</div>
                         <div class="purpose-desc">Company info, services, contact</div>
                       </div>
                       <div class="purpose-card" data-purpose="ecommerce" onclick="selectPurpose('ecommerce')">
-                        <span class="purpose-icon">🛍️</span>
+                        <span class="purpose-icon">
+                          <svg class="purpose-svg" viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                        </span>
                         <div class="purpose-name">E‑commerce</div>
                         <div class="purpose-desc">Products, cart, checkout</div>
                       </div>
                       <div class="purpose-card" data-purpose="social" onclick="selectPurpose('social')">
-                        <span class="purpose-icon">💬</span>
+                        <span class="purpose-icon">
+                          <svg class="purpose-svg" viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        </span>
                         <div class="purpose-name">Social</div>
                         <div class="purpose-desc">Feed, chat, profiles</div>
                       </div>
                       <div class="purpose-card" data-purpose="portfolio" onclick="selectPurpose('portfolio')">
-                        <span class="purpose-icon">🎨</span>
+                        <span class="purpose-icon">
+                          <svg class="purpose-svg" viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                        </span>
                         <div class="purpose-name">Portfolio</div>
                         <div class="purpose-desc">Showcase work, resume</div>
                       </div>
                       <div class="purpose-card" data-purpose="custom" onclick="selectPurpose('custom')">
-                        <span class="purpose-icon">✨</span>
+                        <span class="purpose-icon">
+                          <svg class="purpose-svg" viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </span>
                         <div class="purpose-name">Custom</div>
                         <div class="purpose-desc">Start from scratch</div>
                       </div>
@@ -596,6 +606,11 @@
     <div id="toastContainer" class="toast-container"></div>
   </div>
 
+  <!-- Google Firebase Compat Web SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  
   <script src="app.js"></script>
 </body>
 </html>

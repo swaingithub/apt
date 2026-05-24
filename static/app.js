@@ -1,3 +1,18 @@
+// ── Firebase Configuration & Initialization ──
+const firebaseConfig = {
+  apiKey: "demo-apt-project-key",
+  authDomain: "demo-apt-project.firebaseapp.com",
+  projectId: "demo-apt-project",
+  storageBucket: "demo-apt-project.appspot.com",
+  appId: "1:123456789:web:abcdef"
+};
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 const API = '/api';
 let currentUser = null;
 let authMode = 'login';
@@ -23,6 +38,36 @@ async function api(method, path, body) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
+
+    // ── Firebase Firestore Sync Hook ──
+    try {
+        if (method === 'POST' && path === '/apps' && data && data.app_id) {
+            db.collection('apps').doc(data.app_id).set({
+                userId: currentUser ? currentUser.id : 'anonymous',
+                appName: body.config ? body.config.app_name : 'App',
+                config: body,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(err => console.error("Firestore Create Error:", err));
+        } else if (method === 'PUT' && path.startsWith('/apps/')) {
+            const parts = path.split('/');
+            const targetAppId = parts[2];
+            if (targetAppId && body) {
+                db.collection('apps').doc(targetAppId).set({
+                    config: body.config || body,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true }).catch(err => console.error("Firestore Save Error:", err));
+            }
+        } else if (method === 'DELETE' && path.startsWith('/apps/')) {
+            const parts = path.split('/');
+            const targetAppId = parts[2];
+            if (targetAppId) {
+                db.collection('apps').doc(targetAppId).delete().catch(err => console.error("Firestore Delete Error:", err));
+            }
+        }
+    } catch (fe) {
+        console.error("Firestore Intercept Error:", fe);
+    }
+
     return data;
 }
 
@@ -197,10 +242,11 @@ window.toggleAuthMode = toggleAuthMode;
 
 document.getElementById('authBtn').addEventListener('click', () => {
     if (currentUser) {
+        try { auth.signOut(); } catch (e) {}
         setToken(null);
         currentUser = null;
         renderUser();
-        toast('Signed out');
+        toast('Signed out successfully');
         loadApps();
     } else {
         authMode = 'login';
@@ -218,14 +264,73 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
     const password = document.getElementById('authPassword').value;
     const name = document.getElementById('authName').value;
     try {
-        const res = authMode === 'login'
-            ? await api('POST', '/auth/login', { email, password })
-            : await api('POST', '/auth/register', { email, password, name });
+        let isLocalMode = firebaseConfig.apiKey === "demo-apt-project-key";
+        let res;
+
+        if (isLocalMode) {
+            // Local Mode Auth directly against Rust SQLite database!
+            const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+            const payload = authMode === 'login' ? { email, password } : { email, password, name };
+            
+            const localRes = await fetch(API + endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            res = await localRes.json();
+            if (!localRes.ok) throw new Error(res.message || res.error || 'Authentication failed');
+            toast(authMode === 'login' ? 'Signed in locally!' : 'Local account created!');
+        } else {
+            // Real Firebase Auth with a fallback on error
+            try {
+                let user;
+                if (authMode === 'login') {
+                    const result = await auth.signInWithEmailAndPassword(email, password);
+                    user = result.user;
+                } else {
+                    const result = await auth.createUserWithEmailAndPassword(email, password);
+                    user = result.user;
+                    if (name) {
+                        await user.updateProfile({ displayName: name });
+                    }
+                }
+
+                // Sync with local Rust backend to get standard JWT token
+                const syncRes = await fetch(API + '/auth/firebase-sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: user.email,
+                        uid: user.uid,
+                        name: user.displayName || name || user.email.split('@')[0]
+                    })
+                });
+                res = await syncRes.json();
+                if (!syncRes.ok) throw new Error(res.message || 'Firebase sync failed');
+                toast(authMode === 'login' ? 'Signed in via Firebase!' : 'Account created via Firebase!');
+            } catch (fe) {
+                console.warn("Firebase Auth failed, attempting local fallback:", fe);
+                // Graceful fallback to local Auth if Firebase has invalid credentials or configuration!
+                const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+                const payload = authMode === 'login' ? { email, password } : { email, password, name };
+                
+                const localRes = await fetch(API + endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                res = await localRes.json();
+                if (!localRes.ok) throw new Error(res.message || res.error || 'Authentication failed');
+                
+                toast('Firebase auth unavailable. Logged in locally.', 'info');
+            }
+        }
+
         setToken(res.token);
         currentUser = res.user;
         renderUser();
         closeModal('authModal');
-        toast(authMode === 'login' ? 'Signed in!' : 'Account created!');
+        
         document.getElementById('authEmail').value = '';
         document.getElementById('authPassword').value = '';
         document.getElementById('authName').value = '';
@@ -294,39 +399,39 @@ window.prevStep = prevStep;
 const APP_TEMPLATES = {
     business: {
         pages: [
-            { name: 'Home', icon: '🏠', elements: [{ type: 'heading', properties: { value: 'Welcome' } }, { type: 'text', properties: { value: 'Your trusted partner since 2024' } }] },
-            { name: 'Services', icon: '⚙️', elements: [{ type: 'heading', properties: { value: 'Our Services' } }, { type: 'text', properties: { value: 'Discover what we offer' } }] },
-            { name: 'Contact', icon: '📞', elements: [{ type: 'heading', properties: { value: 'Get in Touch' } }, { type: 'text', properties: { value: 'Reach out to us anytime' } }] },
-            { name: 'About', icon: 'ℹ️', elements: [{ type: 'heading', properties: { value: 'About Us' } }, { type: 'text', properties: { value: 'Learn our story' } }] },
+            { name: 'Home', icon: '⌂', elements: [{ type: 'heading', properties: { value: 'Welcome' } }, { type: 'text', properties: { value: 'Your trusted partner since 2024' } }] },
+            { name: 'Services', icon: '⚙', elements: [{ type: 'heading', properties: { value: 'Our Services' } }, { type: 'text', properties: { value: 'Discover what we offer' } }] },
+            { name: 'Contact', icon: '☏', elements: [{ type: 'heading', properties: { value: 'Get in Touch' } }, { type: 'text', properties: { value: 'Reach out to us anytime' } }] },
+            { name: 'About', icon: 'ℹ', elements: [{ type: 'heading', properties: { value: 'About Us' } }, { type: 'text', properties: { value: 'Learn our story' } }] },
         ]
     },
     ecommerce: {
         pages: [
-            { name: 'Home', icon: '🏠', elements: [{ type: 'banner', properties: { value: 'Big Sale!', placeholder: 'Up to 50% off' } }] },
-            { name: 'Products', icon: '📦', elements: [{ type: 'heading', properties: { value: 'All Products' } }, { type: 'grid', properties: { gridCols: 2 } }] },
-            { name: 'Cart', icon: '🛒', elements: [{ type: 'heading', properties: { value: 'Shopping Cart' } }] },
-            { name: 'Profile', icon: '👤', elements: [{ type: 'heading', properties: { value: 'My Account' } }] },
+            { name: 'Home', icon: '⌂', elements: [{ type: 'banner', properties: { value: 'Big Sale!', placeholder: 'Up to 50% off' } }] },
+            { name: 'Products', icon: '▣', elements: [{ type: 'heading', properties: { value: 'All Products' } }, { type: 'grid', properties: { gridCols: 2 } }] },
+            { name: 'Cart', icon: '⎗', elements: [{ type: 'heading', properties: { value: 'Shopping Cart' } }] },
+            { name: 'Profile', icon: '○', elements: [{ type: 'heading', properties: { value: 'My Account' } }] },
         ]
     },
     social: {
         pages: [
-            { name: 'Feed', icon: '📰', elements: [{ type: 'heading', properties: { value: 'Feed' } }] },
-            { name: 'Explore', icon: '🔍', elements: [{ type: 'heading', properties: { value: 'Explore' } }] },
-            { name: 'Chat', icon: '💬', elements: [{ type: 'heading', properties: { value: 'Messages' } }] },
-            { name: 'Profile', icon: '👤', elements: [{ type: 'heading', properties: { value: 'My Profile' } }] },
+            { name: 'Feed', icon: '▤', elements: [{ type: 'heading', properties: { value: 'Feed' } }] },
+            { name: 'Explore', icon: '⌕', elements: [{ type: 'heading', properties: { value: 'Explore' } }] },
+            { name: 'Chat', icon: '✉', elements: [{ type: 'heading', properties: { value: 'Messages' } }] },
+            { name: 'Profile', icon: '○', elements: [{ type: 'heading', properties: { value: 'My Profile' } }] },
         ]
     },
     portfolio: {
         pages: [
-            { name: 'Home', icon: '🏠', elements: [{ type: 'heading', properties: { value: "Hello, I'm" } }, { type: 'text', properties: { value: 'Designer & Developer' } }] },
-            { name: 'Work', icon: '🎨', elements: [{ type: 'heading', properties: { value: 'My Work' } }, { type: 'grid', properties: { gridCols: 2 } }] },
-            { name: 'Resume', icon: '📄', elements: [{ type: 'heading', properties: { value: 'Experience' } }] },
-            { name: 'Contact', icon: '📞', elements: [{ type: 'heading', properties: { value: 'Get in Touch' } }] },
+            { name: 'Home', icon: '⌂', elements: [{ type: 'heading', properties: { value: "Hello, I'm" } }, { type: 'text', properties: { value: 'Designer & Developer' } }] },
+            { name: 'Work', icon: '✦', elements: [{ type: 'heading', properties: { value: 'My Work' } }, { type: 'grid', properties: { gridCols: 2 } }] },
+            { name: 'Resume', icon: '▤', elements: [{ type: 'heading', properties: { value: 'Experience' } }] },
+            { name: 'Contact', icon: '☏', elements: [{ type: 'heading', properties: { value: 'Get in Touch' } }] },
         ]
     },
     custom: {
         pages: [
-            { name: 'Home', icon: '🏠', elements: [{ type: 'heading', properties: { value: 'Welcome' } }] },
+            { name: 'Home', icon: '⌂', elements: [{ type: 'heading', properties: { value: 'Welcome' } }] },
         ]
     }
 };
@@ -410,18 +515,18 @@ const BLOCK_CATEGORIES = [
         name: 'Content', items: [
             { type: 'heading', icon: 'H', label: 'Heading' },
             { type: 'text', icon: '¶', label: 'Text' },
-            { type: 'image', icon: '🖼', label: 'Image' },
+            { type: 'image', icon: '▩', label: 'Image' },
             { type: 'video', icon: '▶', label: 'Video' },
             { type: 'icon', icon: '♡', label: 'Icon' },
         ]
     },
     {
         name: 'Interactive', items: [
-            { type: 'button', icon: '⌂', label: 'Button' },
-            { type: 'input', icon: '⌨', label: 'Input' },
+            { type: 'button', icon: '▭', label: 'Button' },
+            { type: 'input', icon: '▭', label: 'Input' },
             { type: 'textarea', icon: '☰', label: 'Textarea' },
             { type: 'select', icon: '▼', label: 'Select' },
-            { type: 'checkbox', icon: '☑', label: 'Checkbox' },
+            { type: 'checkbox', icon: '☐', label: 'Checkbox' },
             { type: 'switch', icon: '⬡', label: 'Switch' },
         ]
     },
@@ -456,7 +561,7 @@ function createDefaultBlock(type) {
 function addPage(name) {
     pageIdCounter++;
     const id = 'page_' + pageIdCounter;
-    formPages.push({ id, name: name || 'Page ' + pageIdCounter, icon: '📄', elements: [] });
+    formPages.push({ id, name: name || 'Page ' + pageIdCounter, icon: '▤', elements: [] });
     builderActivePageId = id;
     selectedBlockId = null;
     renderBuilder();
@@ -581,7 +686,7 @@ function renderBuilderPageTabs() {
     const container = document.getElementById('builderPageTabs');
     container.innerHTML = formPages.map(p =>
         '<div class="builder-page-tab' + (p.id === builderActivePageId ? ' active' : '') + '" onclick="selectBuilderPage(\'' + p.id + '\')">' +
-        esc(p.icon || '📄') + ' ' + esc(p.name) +
+        esc(p.icon || '▤') + ' ' + esc(p.name) +
         '<button class="tab-close" onclick="event.stopPropagation();removePage(\'' + p.id + '\')">&times;</button>' +
         '</div>'
     ).join('');
@@ -630,7 +735,7 @@ function renderBuilderCanvas() {
         return;
     }
 
-    nameEl.textContent = esc(page.icon || '📄') + ' ' + esc(page.name);
+    nameEl.textContent = esc(page.icon || '▤') + ' ' + esc(page.name);
     countEl.textContent = page.elements.length + ' blocks';
 
     if (page.elements.length === 0) {
@@ -659,7 +764,7 @@ function renderMiniBlock(el) {
         case 'heading': return '<div style="font-size:' + (el.styles.fontSize || '13') + 'px;font-weight:' + (el.styles.fontWeight || '700') + ';color:' + (el.styles.color || '#0f172a') + '">' + esc(props.value || 'Heading') + '</div>';
         case 'text': return '<div style="font-size:' + (el.styles.fontSize || '10') + 'px;color:' + (el.styles.color || '#475569') + ';line-height:1.4">' + esc(props.value || 'Text') + '</div>';
         case 'button': return '<div style="padding:8px;background:' + (el.styles.backgroundColor || '#6366f1') + ';color:' + (el.styles.color || '#fff') + ';border-radius:' + (el.styles.borderRadius || '6') + 'px;text-align:center;font-size:10px;font-weight:600">' + esc(props.value || 'Button') + '</div>';
-        case 'image': return '<div style="height:50px;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#94a3b8">🖼 ' + esc(props.src || 'No image') + '</div>';
+        case 'image': return '<div style="height:50px;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#94a3b8">▩ ' + esc(props.src || 'No image') + '</div>';
         case 'divider': return '<div style="border-top:1px solid #e2e8f0;margin:4px 0"></div>';
         case 'banner': return '<div style="padding:16px 10px;background:' + (el.styles.backgroundColor || '#6366f1') + ';color:#fff;border-radius:8px;font-size:10px;font-weight:600;text-align:center">' + esc(props.value || 'Banner') + '</div>';
         case 'grid': return '<div style="font-size:9px;color:#94a3b8;padding:4px 0">⊞ Grid (' + (props.gridCols || 2) + ' cols)</div>';
@@ -915,7 +1020,7 @@ function updateLivePreview() {
     // Update page chips
     const chipsContainer = document.getElementById('previewPageList');
     chipsContainer.innerHTML = pages.map((p, i) =>
-        '<span class="preview-page-chip' + (i === 0 ? ' active' : '') + '">' + esc(p.icon || '📄') + ' ' + esc(p.name) + '</span>'
+        '<span class="preview-page-chip' + (i === 0 ? ' active' : '') + '">' + esc(p.icon || '▤') + ' ' + esc(p.name) + '</span>'
     ).join('');
 
     if (!pages.length) {
@@ -947,7 +1052,7 @@ function updateLivePreview() {
                     elm.style.cssText = 'font-size:10px;padding:16px 12px;border-radius:8px;background:' + primary + ';color:#fff;text-align:center;font-weight:600';
                     break;
                 case 'grid':
-                    elm.textContent = '📐 Grid layout';
+                    elm.textContent = 'Grid layout';
                     elm.style.cssText = 'font-size:9px;padding:8px;background:rgba(255,255,255,0.04);border-radius:4px;text-align:center;color:#64748b';
                     break;
                 default:
@@ -958,7 +1063,7 @@ function updateLivePreview() {
         });
     } else {
         const placeholder = document.createElement('div');
-        placeholder.textContent = '✨ ' + firstPage.name;
+        placeholder.textContent = firstPage.name;
         placeholder.style.cssText = 'font-size:12px;font-weight:600;color:#e2e8f0;text-align:center;padding:24px 8px';
         container.appendChild(placeholder);
     }
@@ -990,7 +1095,7 @@ function renderPagesGrid() {
     }
     grid.innerHTML = formPages.map(p =>
         '<div class="page-card">' +
-        '<div class="page-card-icon">' + esc(p.icon || '📄') + '</div>' +
+        '<div class="page-card-icon">' + esc(p.icon || '▤') + '</div>' +
         '<div class="page-card-name">' + esc(p.name) + '</div>' +
         '<span class="page-card-badge">' + p.elements.length + ' blocks</span>' +
         '</div>'
@@ -1261,7 +1366,7 @@ async function editApp(appId) {
         document.getElementById('description').value = '';
 
         // Load pages
-        formPages = pages.map(p => ({ id: p.id, name: p.name, icon: '📄', elements: p.elements || [] }));
+        formPages = pages.map(p => ({ id: p.id, name: p.name, icon: '▤', elements: p.elements || [] }));
         pageIdCounter = pages.reduce((max, p) => {
             const num = parseInt(p.id.replace('page_', ''), 10);
             return isNaN(num) ? max : Math.max(max, num);
@@ -1749,7 +1854,7 @@ function renderElement(el, parent, state, ctx) {
         }
         case 'map':
             elm.className = 'sim-map';
-            elm.textContent = '📍 ' + (props.mapLocation || 'Map Location');
+            elm.textContent = 'Location: ' + (props.mapLocation || 'Map Location');
             break;
         case 'carousel': {
             elm.className = 'sim-carousel';
@@ -2097,7 +2202,7 @@ async function loadAppIntoBuilder(appId) {
         formPages = pages.map(p => ({
             id: p.id,
             name: p.name,
-            icon: '📄',
+            icon: '▤',
             elements: JSON.parse(JSON.stringify(p.elements || [])),
         }));
         pageIdCounter = formPages.length;
@@ -2247,7 +2352,7 @@ function renderBuilderViewPageTabs() {
     const container = document.getElementById('builderViewPageTabs');
     container.innerHTML = formPages.map(p =>
         '<div class="builder-page-tab' + (p.id === builderActivePageId ? ' active' : '') + '" onclick="selectBuilderViewPage(\'' + p.id + '\')">' +
-        esc(p.icon || '📄') + ' ' + esc(p.name) +
+        esc(p.icon || '▤') + ' ' + esc(p.name) +
         '<button class="tab-close" onclick="event.stopPropagation();builderRemovePage(\'' + p.id + '\')">&times;</button>' +
         '</div>'
     ).join('');
@@ -2315,7 +2420,7 @@ function renderBuilderViewCanvas() {
         return;
     }
 
-    nameEl.textContent = esc(page.icon || '📄') + ' ' + esc(page.name);
+    nameEl.textContent = esc(page.icon || '▤') + ' ' + esc(page.name);
     countEl.textContent = page.elements.length + ' blocks';
 
     if (page.elements.length === 0) {

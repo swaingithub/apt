@@ -113,6 +113,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .route("/api/auth/register", web::post().to(root_auth::register))
         .route("/api/auth/login", web::post().to(root_auth::login))
         .route("/api/auth/me", web::get().to(root_auth::me))
+        .route("/api/auth/firebase-sync", web::post().to(root_auth::firebase_sync))
         .route("/api/generate", web::post().to(generate_from_template))
         .route("/api/apps", web::post().to(create_app))
         .route("/api/apps", web::get().to(list_apps))

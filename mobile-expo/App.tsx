@@ -53,9 +53,29 @@ function AppInner() {
   return <AptApp config={localConfig} />;
 }
 
+import Constants from 'expo-constants';
+
+const getApiBase = () => {
+  const envBase = process.env.EXPO_PUBLIC_API_BASE;
+  if (envBase && !envBase.includes('localhost') && !envBase.includes('127.0.0.1')) {
+    // If the port in env is still 8080, but our server runs on 8085, adjust it
+    return envBase.replace(':8080', ':8085');
+  }
+
+  // Detect developer machine's LAN IP dynamically from Metro packager host
+  const hostUri = Constants.expoConfig?.hostUri || 
+                  Constants.manifest2?.extra?.expoGoLaunchMetadata?.manifest?.hostUri;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    return `http://${ip}:8085`;
+  }
+  return 'http://localhost:8085';
+};
+
 export default function App() {
   const slug = localConfig.runtime?.slug || localConfig.appName?.toLowerCase().replace(/\s+/g, '-');
-  const apiBase = localConfig.runtime?.apiBaseUrl || 'http://localhost:8080';
+  const apiBase = getApiBase();
+  
   return (
     <ConfigProvider slug={slug} apiBase={apiBase}>
       <AppInner />

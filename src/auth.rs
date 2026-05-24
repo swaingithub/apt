@@ -201,3 +201,49 @@ pub async fn me(
         }))),
     }
 }
+
+pub async fn firebase_sync(
+    db: web::Data<Database>,
+    body: web::Json<serde_json::Value>,
+) -> actix_web::Result<HttpResponse> {
+    let email = body.get("email").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let uid = body.get("uid").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+
+    if email.is_empty() || uid.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "validation_error",
+            "message": "Email and uid required"
+        })));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let existing_user = db.get_user_by_email(&email).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(e.to_string())
+    })?;
+
+    let final_id = match existing_user {
+        Some((id, _, _, _)) => id,
+        None => {
+            db.create_user(&uid, &email, "firebase_managed", &name, &now).map_err(|e| {
+                actix_web::error::ErrorInternalServerError(e.to_string())
+            })?;
+            uid
+        }
+    };
+
+    let token = create_token(&final_id, &email).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Token failed: {}", e))
+    })?;
+
+    let name_str = if name.is_empty() { email.split('@').next().unwrap_or("").to_string() } else { name };
+
+    Ok(HttpResponse::Ok().json(AuthResponse {
+        token,
+        user: UserResponse {
+            id: final_id,
+            email,
+            name: name_str,
+        },
+    }))
+}

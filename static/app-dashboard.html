@@ -122,10 +122,37 @@
     .pub-item .pub-date { font-size: 0.78rem; color: var(--text-muted); }
     .pub-item .pub-current { font-size: 0.68rem; padding: 1px 8px; border-radius: 999px; background: var(--success-subtle); color: var(--success); font-weight: 600; }
 
-    /* QR code */
+    /* QR code container & interactivity */
     .qr-container { text-align: center; padding: 16px; }
-    .qr-container img { width: 120px; height: 120px; border-radius: 8px; }
-    .qr-container .qr-label { font-size: 0.72rem; color: var(--text-muted); margin-top: 8px; }
+    .qr-tab-btn { transition: all 0.2s ease; }
+    .qr-tab-btn:hover { background: var(--bg-hover) !important; color: var(--text) !important; }
+    .qr-pill-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .qr-pill-btn:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+    .qr-pill-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 4px 10px rgba(99, 102, 241, 0.25);
+    }
+    .btn-text-edit {
+      transition: opacity 0.2s;
+    }
+    .btn-text-edit:hover {
+      opacity: 0.8;
+    }
 
     /* Settings form modal */
     .settings-form .form-row { margin-bottom: 16px; }
@@ -227,60 +254,98 @@
     .add-page-form { display: flex; gap: 8px; margin-top: 16px; padding: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
     .add-page-form.hidden { display: none; }
     .rename-input { font-size: 0.85rem; font-weight: 600; padding: 2px 6px; border: 1px solid var(--primary); border-radius: 4px; background: var(--bg-input); color: var(--text); outline: none; width: auto; min-width: 120px; }
-
-    /* Native Builder */
-    .dbuilder-layout { display: grid; grid-template-columns: 240px 1fr 260px; gap: 0; flex: 1; min-height: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    
+    /* Native Builder — Polished with appmaker.xyz premium design */
+    .dbuilder-layout { display: grid; grid-template-columns: 220px 1fr 260px; gap: 0; flex: 1; min-height: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .app-view[data-appview="builder"] { height: calc(100vh - 64px); display: none; flex-direction: column; }
     .app-view[data-appview="builder"].active { display: flex; }
 
     .dbuilder-palette { border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-surface); }
-    .dbuilder-palette-search { padding: 10px; border-bottom: 1px solid var(--border); }
-    .dbuilder-palette-search input { width: 100%; padding: 7px 10px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); outline: none; }
-    .dbuilder-palette-section { padding: 8px 0; border-bottom: 1px solid var(--border); }
-    .dbuilder-palette-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); padding: 4px 12px 6px; }
-    .dbuilder-palette-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 0.78rem; cursor: pointer; color: var(--text-secondary); border-radius: 4px; margin: 1px 6px;  }
-    .dbuilder-palette-item:hover { background: var(--bg-hover); color: var(--text); }
+    .dbuilder-palette-search { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    .dbuilder-palette-search input { width: 100%; padding: 6px 10px; font-size: 0.76rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); outline: none; }
+    
+    .dbuilder-palette-section { padding: 10px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .dbuilder-palette-title { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); grid-column: 1 / -1; margin-bottom: 2px; padding-left: 2px; }
+    .dbuilder-palette-item { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; padding: 8px 4px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; margin: 0; cursor: pointer; transition: all 0.2s ease; }
+    .dbuilder-palette-item:hover { background: var(--bg-hover); border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .dbuilder-palette-item span { font-size: 1.15rem; }
+    .dbuilder-palette-item-label { font-size: 0.68rem; font-weight: 600; color: var(--text-secondary); }
 
-    .dbuilder-canvas-wrap { display: flex; flex-direction: column; overflow: hidden; }
-    .dbuilder-canvas-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
-    .dbuilder-page-tab { display: flex; align-items: center; gap: 5px; padding: 5px 12px; font-size: 0.78rem; border-radius: 6px; cursor: pointer; color: var(--text-secondary); white-space: nowrap;  }
-    .dbuilder-page-tab:hover { background: var(--bg-hover); }
-    .dbuilder-page-tab.active { background: var(--primary-subtle); color: var(--primary); font-weight: 600; }
-    .dbuilder-page-tab .tab-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0 2px; font-size: 0.85rem; line-height: 1; border-radius: 3px; }
-    .dbuilder-page-tab .tab-close:hover { color: var(--danger); background: var(--danger-subtle); }
+    .dbuilder-canvas-wrap { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); transition: all 0.3s; }
+    .dbuilder-canvas-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); overflow: visible; flex-shrink: 0; background: var(--bg-surface); transition: all 0.3s; }
+    .dbuilder-page-tabs { display: flex; align-items: center; gap: 6px; flex-shrink: 0; transition: opacity 0.3s; }
+    .dbuilder-page-dropdown-container { position: relative; display: inline-block; flex-shrink: 0; }
+    .dbuilder-page-dropdown-btn { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 0.78rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-secondary); cursor: pointer; transition: all 0.2s; font-weight: 600; height: 28px; outline: none; }
+    .dbuilder-page-dropdown-btn:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.15); color: var(--text); }
+    .dbuilder-page-dropdown-btn svg { margin-left: 2px; transition: transform 0.2s; }
+    .dbuilder-page-dropdown-btn.open svg { transform: rotate(180deg); }
+    .dbuilder-page-dropdown-menu { position: absolute; top: calc(100% + 4px); left: 0; min-width: 180px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); z-index: 1000; padding: 6px; display: flex; flex-direction: column; gap: 2px; transform-origin: top left; transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1); opacity: 1; transform: scale(1); }
+    .dbuilder-page-dropdown-menu.hidden { display: none; opacity: 0; transform: scale(0.95); }
+    .dbuilder-page-dropdown-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; font-size: 0.76rem; border-radius: 6px; cursor: pointer; color: var(--text-secondary); transition: all 0.15s; font-weight: 500; gap: 12px; }
+    .dbuilder-page-dropdown-item:hover { background: var(--bg-hover); color: var(--text); }
+    .dbuilder-page-dropdown-item.active { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.15); color: var(--primary); font-weight: 600; }
+    .dbuilder-page-dropdown-item .item-label-wrap { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dbuilder-page-dropdown-item .tab-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0 2px; font-size: 0.8rem; line-height: 1; border-radius: 3px; display: none; }
+    .dbuilder-page-dropdown-item:hover .tab-close { display: block; }
+    .dbuilder-page-dropdown-item .tab-close:hover { color: var(--danger); background: var(--danger-subtle); }
+    .dbuilder-tab-add-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; border: 1px dashed var(--border); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; flex-shrink: 0; margin-right: 12px; }
+    .dbuilder-tab-add-btn:hover { background: var(--bg-hover); border-color: var(--primary); color: var(--primary); }
+    .dbuilder-action-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-secondary); cursor: pointer; transition: all 0.2s; flex-shrink: 0; font-weight: 600; font-size: 0.72rem; }
+    .dbuilder-action-btn:hover { background: var(--bg-hover); border-color: var(--primary); color: var(--primary); }
+    .dbuilder-action-btn:active { transform: scale(0.96); }
 
-    .dbuilder-phone-frame { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 16px; overflow: auto; }
-    .dbuilder-hardware-frame { width: 300px; height: 620px; background: #0b0d12; border-radius: 36px; padding: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); position: relative; margin: auto; display: flex; flex-direction: column; }
-    .dbuilder-phone-notch { width: 85px; height: 24px; background: #0b0d12; border-radius: 12px; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10; }
-    .dbuilder-phone-screen { flex: 1; width: 100%; background: var(--phone-bg, #f2f2f7); border-radius: 26px; padding: 48px 12px 12px; position: relative; overflow-y: auto; color: var(--phone-text, #000); }
-    .dbuilder-phone-screen .dbuilder-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 0.8rem; }
+    /* Figma/Blueprint DOT Grid background */
+    .dbuilder-phone-frame { flex: 1; display: flex; align-items: center; justify-content: center; background-color: var(--bg); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; padding: 16px 8px; overflow: auto; }
+    .dbuilder-hardware-frame { width: 275px; height: 560px; background: #000000; border-radius: 36px; padding: 10px; box-shadow: 0 15px 40px rgba(0,0,0,0.15), 0 0 0 2px rgba(255,255,255,0.8); position: relative; margin: auto; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .dbuilder-phone-notch { width: 80px; height: 22px; background: #000000; border-radius: 11px; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10; transition: all 0.3s; }
+    .dbuilder-phone-screen { flex: 1; width: 100%; background: var(--phone-bg, #f4f6fa); border-radius: 28px; padding: 38px 8px 8px; position: relative; overflow-y: auto; color: var(--phone-text, #000); scrollbar-width: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .dbuilder-phone-screen::-webkit-scrollbar { display: none; }
+    
+    /* PREVIEW MODE */
+    #dbuilderLayout.preview-mode #dbuilderPalette { display: none !important; }
+    #dbuilderLayout.preview-mode #dbuilderProps { display: none !important; }
+    #dbuilderLayout.preview-mode .dbuilder-canvas-header .dbuilder-page-tabs,
+    #dbuilderLayout.preview-mode .dbuilder-canvas-header .dbuilder-tab-add-btn,
+    #dbuilderLayout.preview-mode .dbuilder-canvas-header .dbuilder-action-btn[title="Undo"],
+    #dbuilderLayout.preview-mode .dbuilder-canvas-header .dbuilder-action-btn[title="Redo"] { display: none !important; }
+    #dbuilderLayout.preview-mode .dbuilder-canvas-header { justify-content: center; }
+    #dbuilderLayout.preview-mode .dbuilder-phone-screen { pointer-events: auto !important; }
+    #dbuilderLayout.preview-mode .dbuilder-block:hover { border-color: transparent !important; background: transparent !important; cursor: default !important; }
+    #dbuilderLayout.preview-mode .dbuilder-block.selected { border: 1px solid transparent !important; background: transparent !important; box-shadow: none !important; }
+    .dbuilder-phone-screen .dbuilder-empty { text-align: center; padding: 60px 10px; color: var(--text-muted); font-size: 0.78rem; }
 
     .dbuilder-props { border-left: 1px solid var(--border); overflow-y: auto; background: var(--bg-surface); }
-    .dbuilder-props-header { padding: 10px 14px; font-size: 0.82rem; font-weight: 600; border-bottom: 1px solid var(--border); }
+    .dbuilder-props-header { padding: 8px 12px; font-size: 0.82rem; font-weight: 600; border-bottom: 1px solid var(--border); color: var(--text); }
     .dbuilder-props-body { padding: 10px; }
-    .dbuilder-props-empty { text-align: center; padding: 40px 10px; font-size: 0.78rem; color: var(--text-muted); }
-    .dbuilder-prop-group { margin-bottom: 10px; }
-    .dbuilder-prop-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
-    .dbuilder-prop-row { display: flex; gap: 6px; align-items: center; }
-    .dbuilder-prop-row input, .dbuilder-prop-row select { flex: 1; padding: 6px 8px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-input); color: var(--text); outline: none; }
-    .dbuilder-prop-row input[type="color"] { width: 36px; flex: none; padding: 2px; height: 30px; cursor: pointer; }
-    .dbuilder-section-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 10px 0 6px; border-top: 1px solid var(--border); margin-top: 6px; }
-    .dbuilder-prop-action-select { padding: 6px 8px; font-size: 0.78rem; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-input); color: var(--text); width: 100%; }
+    .dbuilder-props-empty { text-align: center; padding: 30px 10px; font-size: 0.75rem; color: var(--text-muted); }
+    .dbuilder-prop-group { margin-bottom: 8px; }
+    .dbuilder-prop-label { font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .dbuilder-prop-row { display: flex; gap: 4px; align-items: center; }
+    .dbuilder-prop-row input, .dbuilder-prop-row select { flex: 1; padding: 5px 8px; font-size: 0.76rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); outline: none; height: 26px; }
+    .dbuilder-prop-row input[type="color"] { width: 32px; flex: none; padding: 2px; height: 26px; cursor: pointer; border-radius: 6px; }
+    .dbuilder-section-title { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); padding: 8px 0 4px; border-top: 1px solid var(--border); margin-top: 8px; }
+    .dbuilder-prop-action-select { padding: 5px 8px; font-size: 0.76rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); width: 100%; height: 26px; }
 
-    .dbuilder-block { border: 2px solid transparent; border-radius: 6px; margin: 2px 0; cursor: pointer; position: relative;  }
-    .dbuilder-block.selected { border-color: var(--primary); background: rgba(99,102,241,0.06); }
-    .dbuilder-block:hover { background: rgba(99,102,241,0.04); }
-    .dbuilder-block-toolbar { display: none; position: absolute; top: -22px; right: 0; gap: 2px; z-index: 5; }
+    /* Interactive Blocks & Hover Badging */
+    .dbuilder-block { border: 1px solid transparent; border-radius: 6px; margin: 2px 0; cursor: pointer; position: relative; padding: 1px; transition: all 0.15s ease; }
+    .dbuilder-block.selected { border: 1.5px solid var(--primary); background: rgba(99,102,241,0.04); padding: 0.5px; box-shadow: 0 2px 8px rgba(99,102,241,0.06); }
+    .dbuilder-block:hover { border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.02); }
+    
+    .dbuilder-block-type-badge { display: none; position: absolute; top: -9px; left: 8px; background: var(--primary); color: #ffffff; font-size: 0.55rem; font-weight: 800; padding: 1px 4px; border-radius: 4px; z-index: 6; text-transform: uppercase; letter-spacing: 0.04em; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .dbuilder-block:hover > .dbuilder-block-type-badge, .dbuilder-block.selected > .dbuilder-block-type-badge { display: block; }
+
+    .dbuilder-block-toolbar { display: none; position: absolute; top: 4px; right: 4px; gap: 2px; z-index: 50; }
     .dbuilder-block.selected .dbuilder-block-toolbar { display: flex; }
-    .dbuilder-block-toolbar button { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; }
-    .dbuilder-block-toolbar button:hover { color: var(--text); }
-    .dbuilder-block-toolbar button.danger:hover { color: var(--danger); background: var(--danger-subtle); }
-    .dbuilder-block-content { padding: 4px; }
-    .dbuilder-children { margin: 6px 0 4px 12px; padding: 4px 0 4px 8px; border-left: 2px solid var(--border); border-radius: 2px; }
+    .dbuilder-block-toolbar button { background: var(--primary); border: none; color: #ffffff; cursor: pointer; padding: 2px 4px; font-size: 0.62rem; border-radius: 4px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .dbuilder-block-toolbar button:hover { opacity: 0.9; }
+    .dbuilder-block-toolbar button.danger { background: var(--danger); }
+    
+    .dbuilder-block-content { padding: 2px; }
+    .dbuilder-children { margin: 4px 0 2px 6px; padding: 2px 0 2px 4px; border-left: 1px dashed rgba(255,255,255,0.12); border-radius: 2px; }
     .dbuilder-children .dbuilder-block { margin: 2px 0; }
-    .dbuilder-empty-child { font-size: 0.68rem; color: var(--text-muted); padding: 6px 8px; font-style: italic; }
-    .dbuilder-add-child { font-size: 0.7rem; color: var(--primary); padding: 4px 8px; cursor: pointer; border-radius: 4px; font-weight: 500; }
-    .dbuilder-add-child:hover { background: var(--primary-subtle); }
+    .dbuilder-empty-child { font-size: 0.68rem; color: var(--text-muted); padding: 8px; font-style: italic; text-align: center; }
+    .dbuilder-add-child { font-size: 0.72rem; color: var(--primary); padding: 6px 8px; cursor: pointer; border-radius: 6px; font-weight: 600; text-align: center; background: rgba(99,102,241,0.04); border: 1px dashed rgba(99,102,241,0.15); margin-top: 4px; transition: all 0.2s; }
+    .dbuilder-add-child:hover { background: rgba(99,102,241,0.08); border-color: var(--primary); }
 
     /* App Menu — polished */
     .app-menu-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
@@ -527,43 +592,112 @@
           <div class="app-view" data-appview="builder">
             <div class="app-view-header" style="flex-shrink:0">
               <h2>App Builder</h2>
-              <div style="display:flex;gap:8px">
-                <button class="btn btn-sm btn-success" onclick="saveDashboardBuilder()">Save Changes</button>
+              <div style="display:flex;gap:12px;align-items:center;">
+                <span id="autoSaveIndicator" style="font-size: 0.75rem; color: var(--text-muted); display:flex; align-items:center; gap:6px;">
+                  <span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-muted);"></span> Saved
+                </span>
+                <button class="btn btn-sm btn-primary" id="btnPublishBuilder" onclick="publishBuilderUpdate()" style="background: var(--primary); border-color: var(--primary);">Publish Live App</button>
               </div>
             </div>
             <div class="dbuilder-layout" id="dbuilderLayout">
-              <div class="dbuilder-palette" id="dbuilderPalette">
-                <div class="dbuilder-palette-search">
-                  <input type="text" id="dbuilderPaletteSearch" placeholder="Search blocks..." oninput="dbuilderFilterPalette(this.value)">
+              <div class="dbuilder-palette" id="dbuilderPalette" style="display:flex; flex-direction:column;">
+                <div style="display:flex; border-bottom:1px solid var(--border); background:var(--bg-surface);" id="dbuilderLeftTabs">
+                  <button class="left-tab-btn active" onclick="switchLeftSidebarTab('blocks')" id="btnLeftTabBlocks" style="flex:1; padding:10px 0; border:none; background:transparent; color:var(--text); font-size:0.75rem; font-weight:600; cursor:pointer; border-bottom:2px solid var(--primary); outline:none; transition: all 0.2s;">Elements</button>
+                  <button class="left-tab-btn" onclick="switchLeftSidebarTab('layers')" id="btnLeftTabLayers" style="flex:1; padding:10px 0; border:none; background:transparent; color:var(--text-muted); font-size:0.75rem; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; outline:none; transition: all 0.2s;">Layers</button>
                 </div>
-                <div class="dbuilder-palette-sections" id="dbuilderPaletteSections"></div>
+                <div id="dbuilderBlocksWrapper" style="display:flex; flex-direction:column; flex:1; overflow-y:auto;">
+                  <div class="dbuilder-palette-search">
+                    <input type="text" id="dbuilderPaletteSearch" placeholder="Search blocks..." oninput="dbuilderFilterPalette(this.value)">
+                  </div>
+                  <div class="dbuilder-palette-sections" id="dbuilderPaletteSections"></div>
+                </div>
+                <div id="dbuilderLayersNavigator" class="hidden" style="display:none; flex:1; overflow-y:auto; padding:12px;">
+                  <div style="font-size:0.75rem; color:var(--text-muted); text-align:center; padding:20px;">No elements in this page yet</div>
+                </div>
               </div>
-              <div class="dbuilder-canvas-wrap">
+              <div class="dbuilder-canvas-wrap" style="position:relative; display:flex; flex-direction:column; overflow:hidden; flex:1;">
                 <div class="dbuilder-canvas-header">
                   <div class="dbuilder-page-tabs" id="dbuilderPageTabs"></div>
-                  <button class="btn btn-sm btn-outline" onclick="dBaddPage()" title="Add page">
+                  <button class="dbuilder-tab-add-btn" onclick="dBaddPage()" title="Add page">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                  
+                  <!-- Canvas Undo / Redo controls -->
+                  <div style="display:flex; gap:4px; margin-right:auto; flex-shrink:0;">
+                    <button class="dbuilder-action-btn" onclick="dBUndo()" title="Undo">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                    </button>
+                    <button class="dbuilder-action-btn" onclick="dBRedo()" title="Redo">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+                    </button>
+                  </div>
+                  
+                  <!-- iOS / Android Simulator toggles -->
+                  <div style="display:flex; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:18px; padding:2px; flex-shrink:0;" id="simulatorPlatformToggle">
+                    <button class="btn btn-xs active" id="btnPreviewIos" onclick="switchPreviewPlatform('ios')" style="border-radius:16px; font-size:0.7rem; padding:4px 10px; display:flex; align-items:center; gap:4px; font-weight:600; border:none; background:var(--primary); color:#ffffff; cursor:pointer; transition: all 0.2s;">
+                      iOS
+                    </button>
+                    <button class="btn btn-xs" id="btnPreviewAndroid" onclick="switchPreviewPlatform('android')" style="border-radius:16px; font-size:0.7rem; padding:4px 10px; display:flex; align-items:center; gap:4px; font-weight:600; border:none; background:transparent; color:var(--text-muted); cursor:pointer; transition: all 0.2s;">
+                      Android
+                    </button>
+                  </div>
+                  <button class="btn btn-xs" onclick="dBToggleConsole()" id="btnToggleConsole" title="Toggle Console" style="margin-left: 8px; border: 1px solid var(--border); padding: 4px 10px; font-size: 0.7rem; border-radius: 16px; background: transparent; color: var(--text-muted); display:flex; align-items:center; cursor:pointer; font-weight:600; transition:all 0.2s;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                    Console
+                  </button>
+                  <button class="btn btn-xs" onclick="dBTogglePreviewMode()" id="btnPreviewMode" title="Play Preview" style="margin-left: 8px; border: 1px solid var(--border); padding: 4px 10px; font-size: 0.7rem; border-radius: 16px; background: var(--bg-surface); color: var(--text); display:flex; align-items:center; cursor:pointer; font-weight:600; transition:all 0.2s;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    Play Preview
                   </button>
                 </div>
                 <div class="dbuilder-phone-frame">
                   <div class="dbuilder-hardware-frame">
                     <div class="dbuilder-phone-notch"></div>
-                    <div class="dbuilder-phone-screen" id="dbuilderCanvas">
+                    <div class="dbuilder-status-bar" id="dbuilderStatusBar" style="position: absolute; top: 18px; left: 26px; right: 20px; display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 600; font-family: -apple-system, system-ui, sans-serif; color: #ffffff; mix-blend-mode: difference; z-index: 5; pointer-events: none;">
+                      <span id="dbuilderTime">9:41</span>
+                      <span style="display: flex; gap: 5px; align-items: center;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="10" rx="2" ry="2"/><path d="M22 11v2"/></svg>
+                      </span>
+                    </div>
+                    <div class="dbuilder-phone-screen" id="dbuilderCanvas" onclick="if(typeof dBdeselectBlock === 'function') dBdeselectBlock(event)" ondragover="event.preventDefault();" ondrop="if(typeof dBhandleDrop === 'function') dBhandleDrop(event)">
                       <div class="dbuilder-empty">Select a page to begin</div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div class="dbuilder-props" id="dbuilderProps">
-                <div class="dbuilder-props-header">
-                  <span id="dbuilderPropsTitle">Properties</span>
+                
+                <!-- Live Simulator Event Log Console -->
+                <div id="dbuilderSimulatorConsole" style="display:none; background:#090b0f; border-top:1px solid var(--border); height:160px; flex-direction:column; font-family:'SF Mono', SFMono-Regular, ui-monospace, monospace; flex-shrink:0;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 16px; background:#0e121a; border-bottom:1px solid var(--border); flex-shrink:0;">
+                    <span style="font-size:0.7rem; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:6px;">
+                      <span style="display:inline-block; width:6px; height:6px; background:#22d06c; border-radius:50%; animation: buildPulse 1.5s ease-in-out infinite;"></span>
+                      Simulator Live Console
+                    </span>
+                    <button onclick="dBclearConsole()" style="background:transparent; border:none; color:var(--text-muted); font-size:0.7rem; cursor:pointer;" title="Clear Console">Clear</button>
+                  </div>
+                  <div id="dbuilderConsoleLogs" style="flex:1; overflow-y:auto; padding:10px 16px; font-size:0.72rem; line-height:1.5; color:#a5b4fc; scrollbar-width:thin;">
+                    <div style="color:var(--text-muted); font-style:italic;">Listening for simulator user interactions...</div>
+                  </div>
                 </div>
-                <div class="dbuilder-props-body" id="dbuilderPropsBody">
+              </div>
+              <div class="dbuilder-props" id="dbuilderProps" style="display:flex; flex-direction:column;">
+                <div class="dbuilder-props-header" style="padding:0; border-bottom:1px solid var(--border);">
+                  <div style="display:flex; width:100%; border-bottom:1px solid var(--border);" id="dbuilderPropsTabs">
+                    <button class="prop-tab-btn active" onclick="dBswitchPropTab('props')" id="btnPropTabProps" style="flex:1; padding:12px 0; border:none; background:transparent; color:var(--text); font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; cursor:pointer; border-bottom:2px solid var(--primary); outline:none; transition: all 0.2s;">Config</button>
+                    <button class="prop-tab-btn" onclick="dBswitchPropTab('styles')" id="btnPropTabStyles" style="flex:1; padding:12px 0; border:none; background:transparent; color:var(--text-muted); font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; cursor:pointer; border-bottom:2px solid transparent; outline:none; transition: all 0.2s;">Design</button>
+                    <button class="prop-tab-btn" onclick="dBswitchPropTab('interactions')" id="btnPropTabInteractions" style="flex:1; padding:12px 0; border:none; background:transparent; color:var(--text-muted); font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; cursor:pointer; border-bottom:2px solid transparent; outline:none; transition: all 0.2s;">Actions</button>
+                  </div>
+                  <div style="padding:10px 16px; font-size:0.8rem; font-weight:600; color:var(--text-muted); display:flex; align-items:center; gap:6px;" id="dbuilderPropsTitleContainer">
+                    <span id="dbuilderPropsTitle">Properties</span>
+                  </div>
+                </div>
+                <div class="dbuilder-props-body" id="dbuilderPropsBody" style="flex:1; overflow-y:auto;">
                   <div class="dbuilder-props-empty">Select a block</div>
                 </div>
               </div>
             </div>
           </div>
+
 
           <!-- App Menu -->
           <div class="app-view" data-appview="menu">
@@ -1194,7 +1328,7 @@
   <div id="billingModal" class="modal-overlay hidden">
     <div class="modal modal-sm" style="max-width:480px; border-radius:16px;">
       <div class="modal-header">
-        <h3>💳 Upgrade to Pro</h3>
+        <h3>Upgrade to Pro</h3>
         <button class="modal-close" onclick="closeModal('billingModal')">&times;</button>
       </div>
       <div class="modal-body" style="padding:24px;">
@@ -1241,7 +1375,7 @@
   <div id="storeSubmitModal" class="modal-overlay hidden">
     <div class="modal modal-sm" style="max-width:520px; border-radius:16px;">
       <div class="modal-header">
-        <h3>🚀 Store Deployment Progress</h3>
+        <h3>Store Deployment Progress</h3>
         <button class="modal-close" onclick="closeModal('storeSubmitModal')">&times;</button>
       </div>
       <div class="modal-body" style="padding:24px;">
@@ -1269,6 +1403,11 @@
   </div>
 
   <div id="toastContainer" class="toast-container"></div>
-  <script src="app-dashboard.js"></script>
+  <!-- Google Firebase Compat Web SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <script src="app-dashboard.js?v=1.1"></script>
 </body>
 </html>

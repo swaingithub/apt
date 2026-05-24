@@ -21,8 +21,25 @@ pub async fn build_app(
 
     let source_zip = format!("./output/{}_source.zip", app_id);
     if !Path::new(&source_zip).exists() {
-        let _ = std::fs::create_dir_all("./output");
-        let _ = std::fs::write(&source_zip, b"mock zip content");
+        if let Ok(Some(app)) = db.get_generated_app(&app_id) {
+            let app_name = app["app_name"].as_str().unwrap_or("app");
+            let config = app["config"].clone();
+            let project_config = config.get("project_config").cloned().unwrap_or_else(|| serde_json::json!({}));
+            let package_name = config.get("package_name").and_then(|v| v.as_str()).unwrap_or("com.example.app");
+            let display_name = config.get("display_name").and_then(|v| v.as_str()).unwrap_or(app_name);
+            let version = config.get("version").and_then(|v| v.as_str()).unwrap_or("1.0.0");
+            let primary_color = config.get("primary_color").and_then(|v| v.as_str()).unwrap_or("#000000");
+
+            let _ = crate::services::app_generator::AppGenerator::generate_from_template(
+                &app_id,
+                app_name,
+                &project_config,
+                package_name,
+                display_name,
+                version,
+                primary_color,
+            );
+        }
     }
 
     match EASBuilder::submit_build(&app_id, &platform, Path::new(&source_zip), tracker.get_ref().clone(), db.clone()) {

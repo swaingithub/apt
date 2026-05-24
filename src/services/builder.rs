@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use regex::Regex;
 use std::collections::HashMap;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -83,37 +83,72 @@ impl EASBuilder {
             }
         };
 
-        // Mocking the build process for demonstration
-        update("building", "Initializing build environment...", None);
-        std::thread::sleep(std::time::Duration::from_secs(2));
+        update("building", "Initializing local environment...", None);
+        
+        let mut cmd = Command::new("npx");
+        cmd.args(&["eas-cli", "build", "--platform", platform, "--non-interactive"])
+           .current_dir(build_dir);
 
-        update("building", "Installing dependencies...", None);
-        std::thread::sleep(std::time::Duration::from_secs(3));
+        // Pipe stdout and stderr to stream them in real time
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
 
-        update("building", "Compiling native code...", None);
-        std::thread::sleep(std::time::Duration::from_secs(3));
+        match cmd.spawn() {
+            Ok(mut child) => {
+                let stdout = child.stdout.take().unwrap();
+                let reader = BufReader::new(stdout);
+                let mut accumulated_logs = String::new();
 
-        update("building", format!("Building {} bundle on cloud...", platform).as_str(), None);
-        std::thread::sleep(std::time::Duration::from_secs(4));
+                for line in reader.lines() {
+                    if let Ok(line_content) = line {
+                        let trimmed = line_content.trim();
+                        if !trimmed.is_empty() {
+                            update("building", trimmed, None);
+                            accumulated_logs.push_str(trimmed);
+                            accumulated_logs.push('\n');
+                        }
+                    }
+                }
 
-        update("downloading", "Finalizing artifacts...", None);
-        std::thread::sleep(std::time::Duration::from_secs(2));
-
-        // Create a mock dummy output file
-        let ext = match platform {
-            "android" => "apk",
-            "ios" => "zip",
-            _ => "bin",
-        };
-        let output_path = format!("./output/{}_{}.{}", build_id, platform, ext);
-        let _ = std::fs::write(&output_path, b"mocked binary data");
-
-        update(
-            "completed",
-            "Build completed successfully!",
-            Some(output_path.clone()),
-        );
-        let _ = db.update_build_status(build_id, "completed", Some(&output_path));
+                match child.wait() {
+                    Ok(exit_status) => {
+                        if exit_status.success() {
+                            update("downloading", "EAS cloud build complete! Extracting artifact...", None);
+                            if let Some(url) = Self::extract_artifact_url(&accumulated_logs) {
+                                update("downloading", &format!("Downloading build artifact from: {}", url), None);
+                                match Self::download_artifact(&url, build_id, platform) {
+                                    Ok(local_file) => {
+                                        update("completed", "Build completed successfully!", Some(local_file.clone()));
+                                        let _ = db.update_build_status(build_id, "completed", Some(&local_file));
+                                    }
+                                    Err(e) => {
+                                        let err_msg = format!("EAS Build succeeded, but artifact download failed: {}", e);
+                                        update("failed", &err_msg, None);
+                                        let _ = db.update_build_status(build_id, "failed", None);
+                                    }
+                                }
+                            } else {
+                                update("failed", "Build completed but no download URL was found in logs.", None);
+                                let _ = db.update_build_status(build_id, "failed", None);
+                            }
+                        } else {
+                            update("failed", "EAS Build failed. Please verify Expo CLI configurations and signing credentials.", None);
+                            let _ = db.update_build_status(build_id, "failed", None);
+                        }
+                    }
+                    Err(e) => {
+                        update("failed", &format!("Failed waiting for EAS Build child process: {}", e), None);
+                        let _ = db.update_build_status(build_id, "failed", None);
+                    }
+                }
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to spawn EAS build process: {}. Make sure npx is installed.", e);
+                update("failed", &err_msg, None);
+                let _ = db.update_build_status(build_id, "failed", None);
+            }
+        }
+        
         let _ = std::fs::remove_dir_all(build_dir);
     }
 

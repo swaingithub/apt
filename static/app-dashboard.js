@@ -1,3 +1,18 @@
+// ── Firebase Configuration & Initialization ──
+const firebaseConfig = {
+  apiKey: "demo-apt-project-key",
+  authDomain: "demo-apt-project.firebaseapp.com",
+  projectId: "demo-apt-project",
+  storageBucket: "demo-apt-project.appspot.com",
+  appId: "1:123456789:web:abcdef"
+};
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 const API = '/api';
 
 function getToken() { return localStorage.getItem('apt_token'); }
@@ -17,6 +32,29 @@ async function api(method, path, body) {
     clearTimeout(tid);
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
+
+    // ── Firebase Firestore Sync Hook ──
+    try {
+      if (method === 'PUT' && path.startsWith('/apps/')) {
+        const parts = path.split('/');
+        const targetAppId = parts[2];
+        if (targetAppId && body) {
+          db.collection('apps').doc(targetAppId).set({
+            config: body.config || body,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true }).catch(err => console.error("Firestore Save Error:", err));
+        }
+      } else if (method === 'DELETE' && path.startsWith('/apps/')) {
+        const parts = path.split('/');
+        const targetAppId = parts[2];
+        if (targetAppId) {
+          db.collection('apps').doc(targetAppId).delete().catch(err => console.error("Firestore Delete Error:", err));
+        }
+      }
+    } catch (fe) {
+      console.error("Firestore Intercept Error:", fe);
+    }
+
     return data;
   } catch (e) {
     clearTimeout(tid);
@@ -228,10 +266,20 @@ const dBdefaults = {
 
 const dBcategories = [
   { name: 'Layout', items: [{ type: 'container', icon: '▣', label: 'Container' }, { type: 'grid', icon: '⊞', label: 'Grid' }, { type: 'card', icon: '▢', label: 'Card' }, { type: 'tabs', icon: '≡', label: 'Tabs' }, { type: 'divider', icon: '―', label: 'Divider' }] },
-  { name: 'Content', items: [{ type: 'heading', icon: 'H', label: 'Heading' }, { type: 'text', icon: '¶', label: 'Text' }, { type: 'image', icon: '🖼', label: 'Image' }, { type: 'video', icon: '▶', label: 'Video' }, { type: 'banner', icon: '▬', label: 'Banner' }, { type: 'icon', icon: '♡', label: 'Icon' }] },
+  { name: 'Content', items: [{ type: 'heading', icon: 'H', label: 'Heading' }, { type: 'text', icon: '¶', label: 'Text' }, { type: 'image', icon: '▩', label: 'Image' }, { type: 'video', icon: '▶', label: 'Video' }, { type: 'banner', icon: '▬', label: 'Banner' }, { type: 'icon', icon: '♡', label: 'Icon' }] },
   { name: 'Interactive', items: [{ type: 'button', icon: '⌂', label: 'Button' }, { type: 'input', icon: '⌨', label: 'Input' }, { type: 'textarea', icon: '☰', label: 'Textarea' }, { type: 'select', icon: '▼', label: 'Select' }, { type: 'checkbox', icon: '☑', label: 'Checkbox' }, { type: 'switch', icon: '⬡', label: 'Switch' }] },
   { name: 'Data & Media', items: [{ type: 'list', icon: '☰', label: 'List' }, { type: 'table', icon: '⊟', label: 'Table' }, { type: 'chart', icon: '⬚', label: 'Chart' }, { type: 'carousel', icon: '❮', label: 'Carousel' }, { type: 'map', icon: '⌖', label: 'Map' }] },
-  { name: 'E-Commerce', items: [{ type: 'shopify_grid', icon: '🛍', label: 'Shopify Grid' }, { type: 'woo_grid', icon: '🛒', label: 'Woo Grid' }, { type: 'cart_button', icon: '👜', label: 'Cart Button' }] },
+  { name: 'E-Commerce', items: [{ type: 'shopify_grid', icon: '⚏', label: 'Shopify Grid' }, { type: 'woo_grid', icon: '⚏', label: 'Woo Grid' }, { type: 'cart_button', icon: '⏏', label: 'Cart Button' }] },
+  { 
+    name: 'Presets (1-Click Sections)', 
+    items: [
+      { type: 'preset_hero', icon: '✦', label: 'Hero Banner' }, 
+      { type: 'preset_features', icon: '❖', label: 'Feature Cards' }, 
+      { type: 'preset_shop_header', icon: '☷', label: 'Ecom Header' }, 
+      { type: 'preset_contact', icon: '✉', label: 'Contact Form' },
+      { type: 'preset_pricing', icon: '❑', label: 'Pricing Cards' }
+    ] 
+  }
 ];
 
 function dBgetIcon(type) {
@@ -252,7 +300,7 @@ function dBrenderMini(el) {
     case 'heading': return '<div style="' + baseStyle + (s.fontSize ? '' : 'font-size:1.4rem;') + (s.fontWeight ? '' : 'font-weight:700;') + (s.color ? '' : 'color:#0f172a;') + '">' + esc(props.value || 'Heading') + '</div>';
     case 'text': return '<div style="' + baseStyle + (s.color ? '' : 'color:#475569;') + 'line-height:1.5;">' + esc(props.value || 'Text') + '</div>';
     case 'button': return '<button class="sim-btn" style="' + baseStyle + (s.backgroundColor ? '' : 'background:#6366f1;') + (s.color ? '' : 'color:#fff;') + (s.padding ? '' : 'padding:12px 16px;') + (s.borderRadius ? '' : 'border-radius:8px;') + (s.fontWeight ? '' : 'font-weight:600;') + '"' + clickAction + '>' + esc(props.value || 'Button') + '</button>';
-    case 'image': return props.src ? '<img class="sim-img" src="' + esc(props.src) + '" style="' + baseStyle + '">' : '<div class="sim-img-fallback" style="' + baseStyle + '">🖼 ' + esc(el.label || 'Image') + '</div>';
+    case 'image': return props.src ? '<img class="sim-img" src="' + esc(props.src) + '" style="' + baseStyle + '">' : '<div class="sim-img-fallback" style="' + baseStyle + '">▩ ' + esc(el.label || 'Image') + '</div>';
     case 'video': return '<div class="sim-img-fallback" style="background:#0f172a;color:#fff;' + baseStyle + '">▶ ' + esc(el.label || 'Video') + '</div>';
     case 'divider': return '<div style="border-top:1px solid #e2e8f0;margin:16px 0;' + baseStyle + '"></div>';
     case 'banner': return '<div style="' + baseStyle + (s.backgroundColor ? '' : 'background:#6366f1;') + (s.color ? '' : 'color:#fff;') + (s.padding ? '' : 'padding:20px;') + (s.borderRadius ? '' : 'border-radius:12px;') + 'text-align:center;">' + '<div style="font-weight:700;font-size:1.1rem;margin-bottom:4px;">' + esc(props.value || 'Banner') + '</div>' + '<div style="font-size:0.85rem;opacity:0.9;">' + esc(props.placeholder || '') + '</div></div>';
@@ -272,64 +320,121 @@ function dBrenderMini(el) {
     case 'switch': return '<label style="display:flex;align-items:center;gap:12px;font-size:0.85rem;color:#475569;' + baseStyle + '"><div class="sim-switch"><input type="checkbox"' + changeAction + '><span class="sim-switch-slider"></span></div> ' + esc(el.label || 'Switch') + '</label>';
     case 'list': return '<div style="border:1px solid #e2e8f0;border-radius:8px;' + baseStyle + '"><div style="padding:12px;border-bottom:1px solid #e2e8f0;font-size:0.85rem;">List Item 1</div><div style="padding:12px;border-bottom:1px solid #e2e8f0;font-size:0.85rem;">List Item 2</div><div style="padding:12px;font-size:0.85rem;">List Item 3</div></div>';
     case 'table': return '<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;' + baseStyle + '"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;"><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;"><th style="padding:8px;text-align:left;">ID</th><th style="padding:8px;text-align:left;">Name</th></tr><tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;">1</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">Item A</td></tr><tr><td style="padding:8px;">2</td><td style="padding:8px;">Item B</td></tr></table></div>';
-    case 'chart': return '<div class="sim-img-fallback" style="' + baseStyle + '">📊 ' + esc(props.chartType || 'Bar') + ' Chart</div>';
+    case 'chart': return '<div class="sim-img-fallback" style="' + baseStyle + '">⬚ ' + esc(props.chartType || 'Bar') + ' Chart</div>';
     case 'carousel': return '<div class="sim-img-fallback" style="' + baseStyle + '">❮ Carousel ❯</div>';
     case 'map': return '<div class="sim-img-fallback" style="background:#e2e8f0;color:#64748b;' + baseStyle + '">⌖ Map: ' + esc(props.mapLocation || 'New York') + '</div>';
     case 'shopify_grid': 
     case 'woo_grid': 
       if (ecommProducts && ecommProducts.length > 0) {
         return '<div class="sim-ecommerce-grid" style="' + baseStyle + '">' + 
-               ecommProducts.slice(0, 4).map(p => 
-                 '<div class="sim-ecommerce-item"><div class="sim-ecommerce-img">' + esc(p.image) + '</div><div class="sim-ecommerce-meta"><div class="sim-ecommerce-title">' + esc(p.title) + '</div><div class="sim-ecommerce-price">' + esc(p.price) + '</div></div></div>'
-               ).join('') + 
+               ecommProducts.slice(0, 4).map(p => {
+                 let imgHtml = '';
+                 const imgStr = p.image || '';
+                 if (imgStr.startsWith('http') || imgStr.startsWith('/') || imgStr.startsWith('data:')) {
+                   imgHtml = '<img src="' + esc(imgStr) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px;" />';
+                 } else {
+                   imgHtml = esc(imgStr);
+                 }
+                 return '<div class="sim-ecommerce-item"><div class="sim-ecommerce-img">' + imgHtml + '</div><div class="sim-ecommerce-meta"><div class="sim-ecommerce-title">' + esc(p.title) + '</div><div class="sim-ecommerce-price">' + esc(p.price) + '</div></div></div>';
+               }).join('') + 
                '</div>';
       } else {
-        return '<div class="sim-img-fallback" style="' + baseStyle + '">🛒 Setup Shopify/Woo Integration to view products</div>';
+        return '<div class="sim-img-fallback" style="' + baseStyle + '">⚎ Setup Shopify/Woo Integration to view products</div>';
       }
-    case 'cart_button': return '<div style="display:flex;justify-content:flex-end;padding:8px;' + baseStyle + '"><div style="width:44px;height:44px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 2px 8px rgba(0,0,0,0.05);"><span style="font-size:1.1rem">🛒</span><div style="position:absolute;top:0px;right:0px;background:' + esc(props.badgeColor || '#ef4444') + ';color:#fff;font-size:0.6rem;font-weight:700;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:2px solid #fff;">3</div></div></div>';
+    case 'cart_button': return '<div style="display:flex;justify-content:flex-end;padding:8px;' + baseStyle + '"><div style="width:44px;height:44px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 2px 8px rgba(0,0,0,0.05);"><span style="font-size:1.1rem">⏏</span><div style="position:absolute;top:0px;right:0px;background:' + esc(props.badgeColor || '#ef4444') + ';color:#fff;font-size:0.6rem;font-weight:700;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:2px solid #fff;">3</div></div></div>';
     default: return '<div style="font-size:0.8rem;color:#94a3b8;padding:8px;border:1px dashed #cbd5e1;border-radius:6px;text-align:center;">' + dBgetIcon(el.type) + ' ' + esc(el.type) + '</div>';
   }
 }
 
-function simAction(event, blockId, actionKey) {
-  event.stopPropagation();
-  const page = dBpages.find(p => p.id === dBactivePageId);
-  if (!page) return;
-  const found = dBfindInList(blockId, page.elements);
-  if (!found) return;
-  const el = found.block;
-  if (!el.actions || !el.actions[actionKey]) return;
-  
-  const act = el.actions[actionKey];
-  if (act.type === 'toast') {
-    toast('Simulated Toast: ' + (act.toastText || ''));
-  } else if (act.type === 'navigate') {
-    const target = dBpages.find(p => p.id === act.targetPage);
-    toast('Simulated Navigation to: ' + (target ? target.name : 'Unknown'));
-  } else if (act.type === 'modal') {
-    toast('Simulated Modal: ' + (act.modalContent || ''));
-  } else if (act.type === 'state') {
-    toast('Simulated State Update: ' + act.stateKey + ' = ' + act.stateValue);
+window.dBhasUnpublishedChanges = false;
+
+function updatePublishButtonUI() {
+  const btn = document.getElementById('btnPublishBuilder');
+  if (!btn) return;
+  if (window.dBhasUnpublishedChanges) {
+    btn.innerHTML = '● Publish Updates';
+    btn.style.backgroundColor = '#f59e0b';
+    btn.style.borderColor = '#f59e0b';
+    btn.style.animation = 'buildPulse 2s infinite';
+  } else {
+    btn.innerHTML = 'Publish Live App';
+    btn.style.backgroundColor = 'var(--primary)';
+    btn.style.borderColor = 'var(--primary)';
+    btn.style.animation = 'none';
   }
 }
-window.simAction = simAction;
 
-function dBcreateBlock(type) {
-  dBblockIdCounter++;
-  const def = dBdefaults[type] || dBdefaults.text;
-  return { id: 'b_' + dBblockIdCounter, type, label: def.label, styles: {}, properties: JSON.parse(JSON.stringify(def.properties || {})), actions: JSON.parse(JSON.stringify(def.actions || {})), children: def.children ? [] : undefined };
+let autoSaveTimeout = null;
+
+function debouncedSaveBuilder() {
+  const indicator = document.getElementById('autoSaveIndicator');
+  if (indicator) {
+    indicator.innerHTML = '<span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:#f59e0b;animation:buildPulse 1s infinite;"></span> Saving...';
+  }
+  
+  clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = setTimeout(async () => {
+    try {
+      const cfg = (appData && appData.config) || {};
+      const pc = cfg.project_config || {};
+      pc.pages = dBpages;
+      cfg.project_config = pc;
+      await api('PUT', '/apps/' + appId, cfg);
+      appData = await api('GET', '/apps/' + appId);
+      
+      if (indicator) {
+        indicator.innerHTML = '<span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span> Saved';
+      }
+    } catch(err) {
+      if (indicator) {
+        indicator.innerHTML = '<span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;"></span> Error';
+      }
+    }
+  }, 1000);
 }
 
 async function openDashboardBuilder() {
   const cfg = (appData && appData.config) || {};
   const pc = cfg.project_config || {};
-  const pages = pc.pages || [];
+  let pages = pc.pages || [];
+  
   dBpages = pages.map(p => ({ id: p.id, name: p.name, elements: JSON.parse(JSON.stringify(p.elements || [])) }));
+  
+  if (dBpages.length === 0) {
+    dBpages.push({ id: 'page_home', name: 'Home', elements: [] });
+  }
+  
   dBblockIdCounter = dBpages.reduce((n, p) => Math.max(n, p.elements.reduce((m, e) => Math.max(m, parseInt((e.id || 'b_0').replace('b_', ''), 10) || 0), 0)), 0);
   dBactivePageId = dBpages.length > 0 ? dBpages[0].id : null;
   dBselectedBlockId = null;
+  
+  // Initialize clean history stack
+  dBhistory = [];
+  dBhistoryIndex = -1;
+  dBpushHistory();
+  
   await loadReusableBlocksForBuilder();
+  
+  dBactivePropTab = 'props';
+  dBleftSidebarTab = 'blocks';
+  
+  const indicator = document.getElementById('autoSaveIndicator');
+  if (indicator) {
+    indicator.innerHTML = '<span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span> Saved';
+  }
+  
+  window.dBhasUnpublishedChanges = false;
+  updatePublishButtonUI();
+  
   renderDashboardBuilder();
+  
+  // Set initial rendering configurations
+  setTimeout(() => {
+    switchPreviewPlatform('ios');
+    switchLeftSidebarTab('blocks');
+    dBswitchPropTab('props');
+    dBclearConsole();
+  }, 50);
 }
 
 function renderDashboardBuilder() {
@@ -337,18 +442,70 @@ function renderDashboardBuilder() {
   renderDBuilderPalette();
   renderDBuilderCanvas();
   renderDBuilderProps();
+  
+  if (dBleftSidebarTab === 'layers') {
+    renderDBuilderLayersTree();
+  }
 }
 
 function renderDBuilderPageTabs() {
   const c = document.getElementById('dbuilderPageTabs');
-  c.innerHTML = dBpages.map(p =>
-    '<div class="dbuilder-page-tab' + (p.id === dBactivePageId ? ' active' : '') + '" onclick="dBselectPage(\'' + p.id + '\')">' +
-    esc(p.name) +
-    (dBpages.length > 1 ? '<button class="tab-close" onclick="event.stopPropagation();dBremovePage(\'' + p.id + '\')">&times;</button>' : '') +
-    '</div>'
-  ).join('');
-  if (!dBpages.length) c.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);padding:4px 0">No pages</div>';
+  if (!c) return;
+  
+  const page = dBpages.find(p => p.id === dBactivePageId);
+  const selectedName = page ? page.name : 'Select page';
+  
+  c.innerHTML = `
+    <div class="dbuilder-page-dropdown-container">
+      <button class="dbuilder-page-dropdown-btn" onclick="togglePageDropdown(event)" id="dbPageDropdownBtn">
+        <span class="dbuilder-page-dropdown-icon" style="font-size:0.85rem; opacity: 0.75;">▤</span>
+        <span id="dbSelectedPageName">${esc(selectedName)}</span>
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="dbuilder-page-dropdown-menu hidden" id="dbPageDropdownMenu">
+        ${dBpages.map(p => `
+          <div class="dbuilder-page-dropdown-item${p.id === dBactivePageId ? ' active' : ''}" onclick="dBselectPage('${p.id}')">
+            <div class="item-label-wrap">
+              <span style="font-size:0.75rem; opacity: 0.5;">▤</span>
+              <span>${esc(p.name)}</span>
+            </div>
+            ${dBpages.length > 1 ? `<button class="tab-close" onclick="event.stopPropagation();dBremovePage('${p.id}')">&times;</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
+
+function togglePageDropdown(event) {
+  event.stopPropagation();
+  const btn = document.getElementById('dbPageDropdownBtn');
+  const menu = document.getElementById('dbPageDropdownMenu');
+  if (!menu || !btn) return;
+  
+  const isHidden = menu.classList.contains('hidden');
+  
+  document.querySelectorAll('.dbuilder-page-dropdown-menu').forEach(m => m.classList.add('hidden'));
+  document.querySelectorAll('.dbuilder-page-dropdown-btn').forEach(b => b.classList.remove('open'));
+  
+  if (isHidden) {
+    menu.classList.remove('hidden');
+    btn.classList.add('open');
+    
+    const close = (e) => {
+      if (!menu.contains(e.target) && e.target !== btn) {
+        menu.classList.add('hidden');
+        btn.classList.remove('open');
+        document.removeEventListener('click', close);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', close), 10);
+  } else {
+    menu.classList.add('hidden');
+    btn.classList.remove('open');
+  }
+}
+window.togglePageDropdown = togglePageDropdown;
 
 let dBreusableBlocks = [];
 
@@ -372,8 +529,9 @@ function renderDBuilderPalette() {
     '<div class="dbuilder-palette-section">' +
     '<div class="dbuilder-palette-title">' + esc(cat.name) + '</div>' +
     cat.items.map(item =>
-      '<div class="dbuilder-palette-item" onclick="dBaddBlock(\'' + item.type + '\')">' +
-      '<span>' + item.icon + '</span> ' + esc(item.label) +
+      '<div class="dbuilder-palette-item" draggable="true" ondragstart="event.dataTransfer.setData(\'text/plain\', \'' + item.type + '\')" onclick="dBaddBlock(\'' + item.type + '\')">' +
+      '<span>' + item.icon + '</span> ' +
+      '<span class="dbuilder-palette-item-label">' + esc(item.label) + '</span>' +
       '</div>'
     ).join('') +
     '</div>'
@@ -381,10 +539,10 @@ function renderDBuilderPalette() {
   
   if (dBreusableBlocks && dBreusableBlocks.length > 0) {
     html += '<div class="dbuilder-palette-section">' +
-      '<div class="dbuilder-palette-title" style="color:var(--primary); font-weight:700;">💾 Reusable Templates</div>' +
+      '<div class="dbuilder-palette-title" style="color:var(--primary); font-weight:700;">Saved Templates</div>' +
       dBreusableBlocks.map(item =>
         '<div class="dbuilder-palette-item" onclick="dBaddReusableBlock(\'' + item.id + '\')" style="border:1px dashed rgba(99,102,241,0.3); border-radius:8px; margin-bottom:6px; background:rgba(99,102,241,0.05);">' +
-        '<span>💾</span> ' + esc(item.name) +
+        '<span>▣</span> ' + esc(item.name) +
         '</div>'
       ).join('') +
       '</div>';
@@ -395,6 +553,7 @@ function renderDBuilderPalette() {
 
 function renderDBuilderCanvas() {
   const screen = document.getElementById('dbuilderCanvas');
+  if (!screen) return;
   const page = dBpages.find(p => p.id === dBactivePageId);
   if (!page) { screen.innerHTML = '<div class="dbuilder-empty">Select a page to begin</div>'; screen.style.background = ''; return; }
   
@@ -422,7 +581,10 @@ function renderDBuilderBlock(el, idx, siblings) {
   const sel = el.id === dBselectedBlockId;
   const hasChildren = el.children && Array.isArray(el.children);
   const isContainer = hasChildren && ['container', 'grid', 'card', 'tabs'].includes(el.type);
-  let html = '<div class="dbuilder-block' + (sel ? ' selected' : '') + '" onclick="dBselectBlock(\'' + el.id + '\')">' +
+  const icon = dBgetIcon(el.type) || '■';
+  
+  let html = '<div class="dbuilder-block' + (sel ? ' selected' : '') + '" onclick="event.stopPropagation(); dBselectBlock(\'' + el.id + '\', event)">' +
+    '<div class="dbuilder-block-type-badge">' + icon + ' ' + esc(el.type) + '</div>' +
     '<div class="dbuilder-block-toolbar">' +
     (idx > 0 ? '<button onclick="event.stopPropagation();dBmoveBlock(\'' + el.id + '\',-1)" title="Up">↑</button>' : '') +
     (idx < siblings.length - 1 ? '<button onclick="event.stopPropagation();dBmoveBlock(\'' + el.id + '\',1)" title="Down">↓</button>' : '') +
@@ -447,10 +609,14 @@ function renderDBuilderBlock(el, idx, siblings) {
 function renderDBuilderProps() {
   const body = document.getElementById('dbuilderPropsBody');
   const title = document.getElementById('dbuilderPropsTitle');
+  if (!body || !title) return;
+  
   const page = dBpages.find(p => p.id === dBactivePageId);
   if (!page) { title.textContent = 'Properties'; body.innerHTML = '<div class="dbuilder-props-empty">No active page</div>'; return; }
+  
+  // If no block selected, always show Page Settings
   if (!dBselectedBlockId) {
-    title.textContent = '📄 Page Settings';
+    title.textContent = 'Page Settings';
     const pageProps = page.properties || {};
     let phtml = '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Page Name</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(page.name) + '" onchange="dBupdatePageName(this.value)"></div></div>';
     phtml += '<div class="dbuilder-section-title">Background</div>';
@@ -462,46 +628,111 @@ function renderDBuilderProps() {
     body.innerHTML = phtml;
     return;
   }
+  
   const found = dBfindInList(dBselectedBlockId, page.elements);
   if (!found) { title.textContent = 'Properties'; body.innerHTML = '<div class="dbuilder-props-empty">Block not found</div>'; return; }
+  
   const el = found.block;
   title.textContent = dBgetIcon(el.type) + ' ' + esc(el.label || el.type);
   const props = el.properties || {};
   const styles = el.styles || {};
   const actions = el.actions || {};
-  let html = '';
-  html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Label</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(el.label) + '" onchange="dBupdateLabel(\'' + el.id + '\',this.value)"></div></div>';
-  html += '<div class="dbuilder-section-title">Properties</div>';
-  switch (el.type) {
-    case 'heading': case 'text': html += dBpropInput(el.id, 'value', 'Text', props.value); break;
-    case 'button': html += dBpropInput(el.id, 'value', 'Label', props.value); html += dBpropActionSelect(el.id, 'onClick', actions.onClick, dBpages); if (actions.onClick && actions.onClick.type !== 'none') html += dBrenderActionFields(el.id, 'onClick', actions.onClick, dBpages); break;
-    case 'image': html += dBpropInput(el.id, 'src', 'Source URL', props.src); break;
-    case 'video': html += dBpropInput(el.id, 'src', 'Video URL', props.src); break;
-    case 'banner': html += dBpropInput(el.id, 'value', 'Title', props.value); html += dBpropInput(el.id, 'placeholder', 'Subtitle', props.placeholder); break;
-    case 'input': case 'textarea': html += dBpropInput(el.id, 'placeholder', 'Placeholder', props.placeholder); html += dBpropActionSelect(el.id, 'onChange', actions.onChange, dBpages); break;
-    case 'select': html += dBpropInput(el.id, 'options', 'Options (comma sep)', props.options); html += dBpropActionSelect(el.id, 'onChange', actions.onChange, dBpages); break;
-    case 'checkbox': case 'switch': html += dBpropInput(el.id, 'label', 'Label', el.label); html += dBpropActionSelect(el.id, 'onChange', actions.onChange, dBpages); break;
-    case 'icon': html += dBpropInput(el.id, 'iconName', 'Icon Name', props.iconName); html += dBpropInput(el.id, 'iconSize', 'Size (px)', props.iconSize); break;
-    case 'grid': html += dBpropInput(el.id, 'gridCols', 'Columns', props.gridCols); break;
-    case 'tabs': html += dBpropInput(el.id, 'tabHeaders', 'Tabs (comma sep)', props.tabHeaders); break;
-    case 'list': html += dBpropInput(el.id, 'dataSource', 'Collection', props.dataSource); break;
-    case 'table': html += dBpropInput(el.id, 'dataSource', 'Collection', props.dataSource); html += dBpropInput(el.id, 'columns', 'Columns (comma sep)', props.columns); break;
-    case 'chart': html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Type</label><div class="dbuilder-prop-row"><select onchange="dBupdateProp(\'' + el.id + '\',\'chartType\',this.value)"><option value="bar"' + (props.chartType === 'bar' ? ' selected' : '') + '>Bar</option><option value="line"' + (props.chartType === 'line' ? ' selected' : '') + '>Line</option><option value="pie"' + (props.chartType === 'pie' ? ' selected' : '') + '>Pie</option></select></div></div>'; break;
-    case 'carousel': html += dBpropInput(el.id, 'src', 'Image URLs (comma sep)', props.src); break;
-    case 'map': html += dBpropInput(el.id, 'mapLocation', 'Location', props.mapLocation); break;
-  }
-  html += '<div class="dbuilder-section-title">Styles</div>';
-  html += dBpropStyle(el.id, 'backgroundColor', 'Background', styles.backgroundColor, 'color');
-  html += dBpropStyle(el.id, 'color', 'Text Color', styles.color, 'color');
-  html += dBpropStyle(el.id, 'fontSize', 'Font Size', styles.fontSize);
-  html += dBpropStyle(el.id, 'fontWeight', 'Weight', styles.fontWeight, 'select', ['400', '500', '600', '700', '800']);
-  html += dBpropStyle(el.id, 'textAlign', 'Align', styles.textAlign, 'select', ['left', 'center', 'right']);
-  html += dBpropStyle(el.id, 'padding', 'Padding', styles.padding);
-  html += dBpropStyle(el.id, 'margin', 'Margin', styles.margin);
-  html += dBpropStyle(el.id, 'borderRadius', 'Border Radius', styles.borderRadius);
   
+  let html = '';
+  
+  if (dBactivePropTab === 'props') {
+    // ── CONFIG TAB ──
+    html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Label</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(el.label) + '" onchange="dBupdateLabel(\'' + el.id + '\',this.value)"></div></div>';
+    html += '<div class="dbuilder-section-title">Properties</div>';
+    switch (el.type) {
+      case 'heading': case 'text': html += dBpropInput(el.id, 'value', 'Text', props.value); break;
+      case 'button': html += dBpropInput(el.id, 'value', 'Label', props.value); break;
+      case 'image': 
+        html += dBpropInput(el.id, 'src', 'Source URL', props.src); 
+        html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
+          '<label class="dbuilder-prop-label">Or Upload Local File (Max 2MB)</label>' +
+          '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
+            '<input type="file" id="dbImageFilePicker" accept="image/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 2, false)" style="display:none;">' +
+            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbImageFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+              'Upload Image' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+        break;
+      case 'video': 
+        html += dBpropInput(el.id, 'src', 'Video URL', props.src);
+        html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
+          '<label class="dbuilder-prop-label">Or Upload Video (Max 10MB)</label>' +
+          '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
+            '<input type="file" id="dbVideoFilePicker" accept="video/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 10, false)" style="display:none;">' +
+            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbVideoFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>' +
+              'Upload Video' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+        break;
+      case 'banner': html += dBpropInput(el.id, 'value', 'Title', props.value); html += dBpropInput(el.id, 'placeholder', 'Subtitle', props.placeholder); break;
+      case 'input': case 'textarea': html += dBpropInput(el.id, 'placeholder', 'Placeholder', props.placeholder); break;
+      case 'select': html += dBpropInput(el.id, 'options', 'Options (comma sep)', props.options); break;
+      case 'checkbox': case 'switch': html += dBpropInput(el.id, 'label', 'Label', el.label); break;
+      case 'icon': html += dBpropInput(el.id, 'iconName', 'Icon Name', props.iconName); html += dBpropInput(el.id, 'iconSize', 'Size (px)', props.iconSize); break;
+      case 'grid': html += dBpropInput(el.id, 'gridCols', 'Columns', props.gridCols); break;
+      case 'tabs': html += dBpropInput(el.id, 'tabHeaders', 'Tabs (comma sep)', props.tabHeaders); break;
+      case 'list': html += dBpropInput(el.id, 'dataSource', 'Collection', props.dataSource); break;
+      case 'table': html += dBpropInput(el.id, 'dataSource', 'Collection', props.dataSource); html += dBpropInput(el.id, 'columns', 'Columns (comma sep)', props.columns); break;
+      case 'chart': html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Type</label><div class="dbuilder-prop-row"><select onchange="dBupdateProp(\'' + el.id + '\',\'chartType\',this.value)"><option value="bar"' + (props.chartType === 'bar' ? ' selected' : '') + '>Bar</option><option value="line"' + (props.chartType === 'line' ? ' selected' : '') + '>Line</option><option value="pie"' + (props.chartType === 'pie' ? ' selected' : '') + '>Pie</option></select></div></div>'; break;
+      case 'carousel': 
+        html += dBpropInput(el.id, 'src', 'Image URLs (comma sep)', props.src); 
+        html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
+          '<label class="dbuilder-prop-label">Or Add Local Image (Max 2MB)</label>' +
+          '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
+            '<input type="file" id="dbCarouselFilePicker" accept="image/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 2, true)" style="display:none;">' +
+            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbCarouselFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+              'Add to Carousel' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+        break;
+      case 'map': html += dBpropInput(el.id, 'mapLocation', 'Location', props.mapLocation); break;
+    }
+  } else if (dBactivePropTab === 'styles') {
+    // ── DESIGN TAB ──
+    html += '<div class="dbuilder-section-title" style="margin-top:0;">Styles</div>';
+    html += dBpropStyle(el.id, 'backgroundColor', 'Background', styles.backgroundColor, 'color');
+    html += dBpropStyle(el.id, 'color', 'Text Color', styles.color, 'color');
+    html += dBpropStyle(el.id, 'fontSize', 'Font Size', styles.fontSize);
+    html += dBpropStyle(el.id, 'fontWeight', 'Weight', styles.fontWeight, 'select', ['400', '500', '600', '700', '800']);
+    html += dBpropStyle(el.id, 'textAlign', 'Align', styles.textAlign, 'select', ['left', 'center', 'right']);
+    html += dBpropStyle(el.id, 'padding', 'Padding', styles.padding);
+    html += dBpropStyle(el.id, 'margin', 'Margin', styles.margin);
+    html += dBpropStyle(el.id, 'borderRadius', 'Border Radius', styles.borderRadius);
+  } else if (dBactivePropTab === 'interactions') {
+    // ── ACTIONS TAB ──
+    const clickableTypes = ['container', 'grid', 'card', 'tabs', 'heading', 'text', 'image', 'video', 'banner', 'button', 'icon'];
+    const changeableTypes = ['input', 'textarea', 'select', 'checkbox', 'switch'];
+
+    if (clickableTypes.includes(el.type)) {
+      html += '<div class="dbuilder-section-title" style="margin-top:0;">Interactive Action (Click)</div>';
+      html += dBpropActionSelect(el.id, 'onClick', actions.onClick, dBpages);
+      if (actions.onClick && actions.onClick.type !== 'none') {
+        html += dBrenderActionFields(el.id, 'onClick', actions.onClick, dBpages);
+      }
+    } else if (changeableTypes.includes(el.type)) {
+      html += '<div class="dbuilder-section-title" style="margin-top:0;">Interactive Action (Change)</div>';
+      html += dBpropActionSelect(el.id, 'onChange', actions.onChange, dBpages);
+      if (actions.onChange && actions.onChange.type !== 'none') {
+        html += dBrenderActionFields(el.id, 'onChange', actions.onChange, dBpages);
+      }
+    } else {
+      html += '<div class="dbuilder-props-empty">This element type does not support interactive actions.</div>';
+    }
+  }
+
   html += '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:12px;">' +
-    '<button class="btn btn-sm btn-primary" style="flex:1; justify-content:center;" onclick="dBSaveAsReusable(\'' + el.id + '\')">💾 Save as Reusable</button>' +
+    '<button class="btn btn-sm btn-primary" style="flex:1; justify-content:center;" onclick="dBSaveAsReusable(\'' + el.id + '\')">Save as Reusable</button>' +
     '</div>';
     
   body.innerHTML = html;
@@ -525,6 +756,10 @@ function dBpropActionSelect(elId, actionKey, action, pages) {
     '<option value="navigate"' + (current === 'navigate' ? ' selected' : '') + '>Navigate to Page</option>' +
     '<option value="toast"' + (current === 'toast' ? ' selected' : '') + '>Show Toast</option>' +
     '<option value="modal"' + (current === 'modal' ? ' selected' : '') + '>Show Alert</option>' +
+    '<option value="web_url"' + (current === 'web_url' ? ' selected' : '') + '>Open Web URL</option>' +
+    '<option value="share_sheet"' + (current === 'share_sheet' ? ' selected' : '') + '>Share Content</option>' +
+    '<option value="toggle_dark_mode"' + (current === 'toggle_dark_mode' ? ' selected' : '') + '>Toggle Dark Mode</option>' +
+    '<option value="push_permission"' + (current === 'push_permission' ? ' selected' : '') + '>Request Push Permission</option>' +
     '<option value="state"' + (current === 'state' ? ' selected' : '') + '>Set State</option>' +
     '</select></div></div>';
 }
@@ -543,6 +778,13 @@ function dBrenderActionFields(elId, actionKey, action, pages) {
   if (action.type === 'modal') {
     html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Content</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(action.modalContent || '') + '" onchange="dBupdateAction(\'' + elId + '\',\'' + actionKey + '\',\'modalContent\',this.value)"></div></div>';
   }
+  if (action.type === 'web_url') {
+    html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Web Link URL</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(action.webUrl || 'https://') + '" onchange="dBupdateAction(\'' + elId + '\',\'' + actionKey + '\',\'webUrl\',this.value)"></div></div>';
+  }
+  if (action.type === 'share_sheet') {
+    html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Share Text</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(action.shareText || '') + '" onchange="dBupdateAction(\'' + elId + '\',\'' + actionKey + '\',\'shareText\',this.value)" placeholder="e.g. Check out this store!"></div></div>';
+    html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Share URL</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(action.shareUrl || '') + '" onchange="dBupdateAction(\'' + elId + '\',\'' + actionKey + '\',\'shareUrl\',this.value)" placeholder="e.g. https://store.com"></div></div>';
+  }
   if (action.type === 'state') {
     html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">State Key</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(action.stateKey || '') + '" onchange="dBupdateAction(\'' + elId + '\',\'' + actionKey + '\',\'stateKey\',this.value)"></div></div>';
     html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Value</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(action.stateValue || '') + '" onchange="dBupdateAction(\'' + elId + '\',\'' + actionKey + '\',\'stateValue\',this.value)"></div></div>';
@@ -560,14 +802,147 @@ function dBfindInList(id, list) {
   return null;
 }
 
+function dBcreateBlock(type) {
+  dBblockIdCounter++;
+  const def = dBdefaults[type] || dBdefaults.text;
+  return { id: 'b_' + dBblockIdCounter, type, label: def.label, styles: {}, properties: JSON.parse(JSON.stringify(def.properties || {})), actions: JSON.parse(JSON.stringify(def.actions || {})), children: def.children ? [] : undefined };
+}
+
+function dBcreatePresetBlock(type) {
+  dBblockIdCounter++;
+  const id = 'b_' + dBblockIdCounter;
+  
+  if (type === 'preset_hero') {
+    const container = { id, type: 'container', label: 'Hero Container', styles: { backgroundColor: '#f8fafc', borderRadius: 16, padding: '24' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Hero Heading', styles: { textAlign: 'center', fontSize: 24, fontWeight: '700' }, properties: { value: 'Craft the perfect shopping app' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'text', label: 'Hero Subtitle', styles: { textAlign: 'center', color: '#64748b', fontSize: 14, margin: '8px 0 16px 0' }, properties: { value: 'Build and deploy native Shopify & WooCommerce mobile apps on iOS and Android with no code.' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'button', label: 'Hero Button', styles: { textAlign: 'center', backgroundColor: '#6366f1', color: '#ffffff', borderRadius: 8, margin: '0 auto', padding: '12px 24px' }, properties: { value: 'Get Started' }, actions: { onClick: { type: 'toast', toastText: 'Welcome to your custom mobile app!' } } });
+    return container;
+  }
+  
+  if (type === 'preset_features') {
+    const grid = { id, type: 'grid', label: 'Features Grid', styles: { padding: '12' }, properties: { gridCols: 2 }, children: [] };
+    dBblockIdCounter++;
+    const card1 = { id: 'b_' + dBblockIdCounter, type: 'card', label: 'Feature 1', styles: { backgroundColor: '#ffffff', borderRadius: 12, padding: '16' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    card1.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Card Title', styles: { fontSize: 16, fontWeight: '700' }, properties: { value: 'Real EAS Builds' } });
+    dBblockIdCounter++;
+    card1.children.push({ id: 'b_' + dBblockIdCounter, type: 'text', label: 'Card Text', styles: { fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }, properties: { value: 'Compile native APKs dynamically inside our active build terminals.' } });
+    grid.children.push(card1);
+    
+    dBblockIdCounter++;
+    const card2 = { id: 'b_' + dBblockIdCounter, type: 'card', label: 'Feature 2', styles: { backgroundColor: '#ffffff', borderRadius: 12, padding: '16' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    card2.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Card Title', styles: { fontSize: 16, fontWeight: '700' }, properties: { value: 'Push Notifications' } });
+    dBblockIdCounter++;
+    card2.children.push({ id: 'b_' + dBblockIdCounter, type: 'text', label: 'Card Text', styles: { fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }, properties: { value: 'Keep your users engaged with beautiful real-time broadcasts.' } });
+    grid.children.push(card2);
+    return grid;
+  }
+  
+  if (type === 'preset_shop_header') {
+    const container = { id, type: 'container', label: 'Shop Banner', styles: { backgroundColor: '#1e293b', borderRadius: 16, padding: '20' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'cart_button', label: 'Header Cart', styles: {}, properties: { badgeColor: '#ef4444' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Shop Title', styles: { color: '#ffffff', fontSize: 20, fontWeight: '700' }, properties: { value: 'Our Catalog' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'text', label: 'Shop Sub', styles: { color: '#94a3b8', fontSize: 13, margin: '4px 0 0 0' }, properties: { value: 'Browse top items directly synced from Shopify' } });
+    return container;
+  }
+  
+  if (type === 'preset_contact') {
+    const container = { id, type: 'container', label: 'Contact Form Card', styles: { backgroundColor: '#ffffff', borderRadius: 16, padding: '20' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Form Title', styles: { fontSize: 18, fontWeight: '700', margin: '0 0 12px 0' }, properties: { value: 'Get in Touch' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'input', label: 'Name Field', styles: {}, properties: { placeholder: 'Your Name' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'textarea', label: 'Message Field', styles: { margin: '8px 0' }, properties: { placeholder: 'Your Message...' } });
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'button', label: 'Submit Button', styles: { backgroundColor: '#22c55e', color: '#ffffff', borderRadius: 8, padding: '12' }, properties: { value: 'Send Message' }, actions: { onClick: { type: 'toast', toastText: 'Form submitted successfully!' } } });
+    return container;
+  }
+  
+  if (type === 'preset_pricing') {
+    const container = { id, type: 'container', label: 'Pricing Section', styles: { padding: '12' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    container.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Section Title', styles: { textAlign: 'center', fontSize: 20, fontWeight: '700' }, properties: { value: 'Choose Your Plan' } });
+    dBblockIdCounter++;
+    const grid = { id: 'b_' + dBblockIdCounter, type: 'grid', label: 'Pricing Grid', styles: { margin: '16px 0 0 0' }, properties: { gridCols: 2 }, children: [] };
+    dBblockIdCounter++;
+    const card1 = { id: 'b_' + dBblockIdCounter, type: 'card', label: 'Standard Plan', styles: { backgroundColor: '#ffffff', borderRadius: 12, padding: '16' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    card1.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Plan Name', styles: { fontSize: 16, fontWeight: '700' }, properties: { value: 'Starter' } });
+    dBblockIdCounter++;
+    card1.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Plan Price', styles: { fontSize: 24, fontWeight: '800', color: '#6366f1', margin: '4px 0' }, properties: { value: '$9/mo' } });
+    dBblockIdCounter++;
+    card1.children.push({ id: 'b_' + dBblockIdCounter, type: 'button', label: 'Select Plan Button', styles: { backgroundColor: '#f1f5f9', color: '#0f172a', borderRadius: 6, padding: '8', margin: '8px 0 0 0' }, properties: { value: 'Choose Starter' }, actions: { onClick: { type: 'toast', toastText: 'Starter plan selected!' } } });
+    grid.children.push(card1);
+    
+    dBblockIdCounter++;
+    const card2 = { id: 'b_' + dBblockIdCounter, type: 'card', label: 'Pro Plan', styles: { backgroundColor: '#0f172a', color: '#ffffff', borderRadius: 12, padding: '16' }, properties: {}, children: [] };
+    dBblockIdCounter++;
+    card2.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Plan Name', styles: { fontSize: 16, fontWeight: '700', color: '#ffffff' }, properties: { value: 'Professional' } });
+    dBblockIdCounter++;
+    card2.children.push({ id: 'b_' + dBblockIdCounter, type: 'heading', label: 'Plan Price', styles: { fontSize: 24, fontWeight: '800', color: '#10b981', margin: '4px 0' }, properties: { value: '$29/mo' } });
+    dBblockIdCounter++;
+    card2.children.push({ id: 'b_' + dBblockIdCounter, type: 'button', label: 'Select Plan Button', styles: { backgroundColor: '#6366f1', color: '#ffffff', borderRadius: 6, padding: '8', margin: '8px 0 0 0' }, properties: { value: 'Upgrade to Pro' }, actions: { onClick: { type: 'toast', toastText: 'Upgraded to Professional!' } } });
+    grid.children.push(card2);
+    container.children.push(grid);
+    return container;
+  }
+  
+  return null;
+}
+
 function dBaddBlock(type) {
   const page = dBpages.find(p => p.id === dBactivePageId);
   if (!page) return;
-  const block = dBcreateBlock(type);
-  page.elements.push(block);
+  
+  let block;
+  if (type.startsWith('preset_')) {
+    block = dBcreatePresetBlock(type);
+  } else {
+    block = dBcreateBlock(type);
+  }
+  
+  if (!block) return;
+  
+  if (dBselectedBlockId) {
+    const found = dBfindInList(dBselectedBlockId, page.elements);
+    if (found) {
+      const parentBlock = found.block;
+      if (['container', 'grid', 'card', 'tabs'].includes(parentBlock.type)) {
+        if (!parentBlock.children) parentBlock.children = [];
+        parentBlock.children.push(block);
+      } else {
+        found.parent.splice(found.idx + 1, 0, block);
+      }
+    } else {
+      page.elements.push(block);
+    }
+  } else {
+    page.elements.push(block);
+  }
+  
   dBselectedBlockId = block.id;
+  dBpushHistory();
   renderDashboardBuilder();
 }
+
+window.dBhandleDrop = function(event) {
+  event.preventDefault();
+  const type = event.dataTransfer.getData('text/plain');
+  if (type) {
+    // Determine drop target if we drop inside a specific container block,
+    // but for simplicity, we just add it to the active block or page.
+    dBaddBlock(type);
+  }
+};
 
 function dBduplicateBlock(id) {
   const page = dBpages.find(p => p.id === dBactivePageId);
@@ -587,6 +962,7 @@ function dBduplicateBlock(id) {
     return false;
   };
   findAndDup(page.elements);
+  dBpushHistory();
   renderDBuilderCanvas();
   renderDBuilderProps();
 }
@@ -608,21 +984,43 @@ function dBaddChildBlock(parentId) {
     return false;
   };
   findAndAdd(page.elements);
+  dBpushHistory();
   renderDBuilderCanvas();
   renderDBuilderProps();
 }
 
-function dBselectBlock(id) {
+window.dBdeselectBlock = function(event) {
+  if (event.target.id === 'dbuilderCanvas') {
+    dBselectedBlockId = null;
+    renderDBuilderCanvas();
+    renderDBuilderProps();
+    if (dBleftSidebarTab === 'layers') {
+      renderDBuilderLayersTree();
+    }
+  }
+};
+
+function dBselectBlock(id, event) {
+  if (event) event.stopPropagation();
   dBselectedBlockId = dBselectedBlockId === id ? null : id;
   renderDBuilderCanvas();
   renderDBuilderProps();
+  
+  // Keep layers Navigator synced if active
+  if (dBleftSidebarTab === 'layers') {
+    renderDBuilderLayersTree();
+  }
 }
 
 function dBremoveBlock(id) {
   const page = dBpages.find(p => p.id === dBactivePageId);
   if (!page) return;
   const found = dBfindInList(id, page.elements);
-  if (found) { found.parent.splice(found.idx, 1); if (dBselectedBlockId === id) dBselectedBlockId = null; }
+  if (found) { 
+    found.parent.splice(found.idx, 1); 
+    if (dBselectedBlockId === id) dBselectedBlockId = null; 
+  }
+  dBpushHistory();
   renderDBuilderCanvas();
   renderDBuilderProps();
 }
@@ -635,6 +1033,7 @@ function dBmoveBlock(id, dir) {
   const ni = found.idx + dir;
   if (ni < 0 || ni >= found.parent.length) return;
   [found.parent[found.idx], found.parent[ni]] = [found.parent[ni], found.parent[found.idx]];
+  dBpushHistory();
   renderDBuilderCanvas();
 }
 
@@ -644,6 +1043,7 @@ function dBupdateProp(elId, key, value) {
   const found = dBfindInList(elId, page.elements);
   if (!found) return;
   found.block.properties[key] = value;
+  dBpushHistory();
   renderDBuilderCanvas();
   renderDBuilderProps();
 }
@@ -655,6 +1055,7 @@ function dBupdateStyle(elId, key, value) {
   if (!found) return;
   if (value === '' || value === undefined) delete found.block.styles[key];
   else found.block.styles[key] = value;
+  dBpushHistory();
   renderDBuilderCanvas();
   renderDBuilderProps();
 }
@@ -664,6 +1065,7 @@ function dBupdateLabel(elId, value) {
   if (!page) return;
   const found = dBfindInList(elId, page.elements);
   if (found) found.block.label = value;
+  dBpushHistory();
 }
 
 function dBupdateAction(elId, actionKey, field, value) {
@@ -675,6 +1077,7 @@ function dBupdateAction(elId, actionKey, field, value) {
   if (!el.actions) el.actions = {};
   if (!el.actions[actionKey]) el.actions[actionKey] = { type: 'none' };
   el.actions[actionKey][field] = value;
+  dBpushHistory();
 }
 
 // Page operations
@@ -685,6 +1088,7 @@ function dBaddPage() {
   dBpages.push({ id, name, elements: [] });
   dBactivePageId = id;
   dBselectedBlockId = null;
+  dBpushHistory();
   renderDashboardBuilder();
 }
 
@@ -693,6 +1097,7 @@ function dBremovePage(id) {
   dBpages = dBpages.filter(p => p.id !== id);
   if (dBactivePageId === id) dBactivePageId = dBpages.length > 0 ? dBpages[dBpages.length - 1].id : null;
   dBselectedBlockId = null;
+  dBpushHistory();
   renderDashboardBuilder();
 }
 
@@ -700,6 +1105,7 @@ function dBupdatePageName(val) {
   const page = dBpages.find(p => p.id === dBactivePageId);
   if (page) {
     page.name = val;
+    dBpushHistory();
     renderDBuilderPageTabs();
   }
 }
@@ -709,6 +1115,7 @@ function dBupdatePageProp(key, val) {
   if (page) {
     if (!page.properties) page.properties = {};
     page.properties[key] = val;
+    dBpushHistory();
     renderDBuilderCanvas();
   }
 }
@@ -728,12 +1135,357 @@ function dbuilderFilterPalette(query) {
   });
 }
 
+function switchPreviewPlatform(platform) {
+  const frames = document.querySelectorAll('.dbuilder-hardware-frame');
+  const notches = document.querySelectorAll('.dbuilder-phone-notch');
+  const screens = document.querySelectorAll('.dbuilder-phone-screen');
+  const btnIos = document.getElementById('btnPreviewIos');
+  const btnAndroid = document.getElementById('btnPreviewAndroid');
+  
+  if (!btnIos || !btnAndroid) return;
+  
+  if (platform === 'ios') {
+    btnIos.classList.add('active');
+    btnIos.style.background = 'var(--primary)';
+    btnIos.style.color = '#ffffff';
+    btnAndroid.classList.remove('active');
+    btnAndroid.style.background = 'transparent';
+    btnAndroid.style.color = 'var(--text-muted)';
+    
+    frames.forEach(frame => {
+      frame.style.borderRadius = '32px';
+      frame.style.padding = '10px';
+      frame.style.width = '275px';
+      frame.style.height = '560px';
+    });
+    notches.forEach(notch => {
+      notch.style.width = '80px';
+      notch.style.height = '22px';
+      notch.style.borderRadius = '11px';
+      notch.style.top = '14px';
+      notch.style.left = '50%';
+      notch.style.transform = 'translateX(-50%)';
+    });
+    screens.forEach(screen => {
+      screen.style.borderRadius = '24px';
+      screen.style.paddingTop = '40px';
+    });
+  } else {
+    btnAndroid.classList.add('active');
+    btnAndroid.style.background = 'var(--primary)';
+    btnAndroid.style.color = '#ffffff';
+    btnIos.classList.remove('active');
+    btnIos.style.background = 'transparent';
+    btnIos.style.color = 'var(--text-muted)';
+    
+    frames.forEach(frame => {
+      frame.style.borderRadius = '24px';
+      frame.style.padding = '8px';
+      frame.style.width = '265px';
+      frame.style.height = '540px';
+    });
+    notches.forEach(notch => {
+      notch.style.width = '10px';
+      notch.style.height = '10px';
+      notch.style.borderRadius = '50%';
+      notch.style.top = '12px';
+      notch.style.left = '50%';
+      notch.style.transform = 'translateX(-50%)';
+    });
+    screens.forEach(screen => {
+      screen.style.borderRadius = '18px';
+      screen.style.paddingTop = '26px';
+    });
+  }
+}
+window.switchPreviewPlatform = switchPreviewPlatform;
+
+function switchLeftSidebarTab(tab) {
+  dBleftSidebarTab = tab;
+  const btnBlocks = document.getElementById('btnLeftTabBlocks');
+  const btnLayers = document.getElementById('btnLeftTabLayers');
+  const blocksWrapper = document.getElementById('dbuilderBlocksWrapper');
+  const layersNavigator = document.getElementById('dbuilderLayersNavigator');
+  
+  if (!btnBlocks || !btnLayers) return;
+  
+  if (tab === 'blocks') {
+    btnBlocks.classList.add('active');
+    btnBlocks.style.color = 'var(--text)';
+    btnBlocks.style.borderBottom = '2px solid var(--primary)';
+    
+    btnLayers.classList.remove('active');
+    btnLayers.style.color = 'var(--text-muted)';
+    btnLayers.style.borderBottom = '2px solid transparent';
+    
+    if (blocksWrapper) blocksWrapper.style.display = 'flex';
+    if (layersNavigator) layersNavigator.style.display = 'none';
+  } else {
+    btnLayers.classList.add('active');
+    btnLayers.style.color = 'var(--text)';
+    btnLayers.style.borderBottom = '2px solid var(--primary)';
+    
+    btnBlocks.classList.remove('active');
+    btnBlocks.style.color = 'var(--text-muted)';
+    btnBlocks.style.borderBottom = '2px solid transparent';
+    
+    if (blocksWrapper) blocksWrapper.style.display = 'none';
+    if (layersNavigator) {
+      layersNavigator.style.display = 'block';
+      renderDBuilderLayersTree();
+    }
+  }
+}
+window.switchLeftSidebarTab = switchLeftSidebarTab;
+
+function renderDBuilderLayersTree() {
+  const container = document.getElementById('dbuilderLayersNavigator');
+  if (!container) return;
+  
+  const page = dBpages.find(p => p.id === dBactivePageId);
+  if (!page || !page.elements || page.elements.length === 0) {
+    container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); text-align:center; padding:20px;">No elements in this page yet</div>';
+    return;
+  }
+  
+  let html = '<div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:10px; padding-left:4px;">Element Hierarchy</div>';
+  
+  function buildTreeHtml(elements, depth = 0) {
+    let treeHtml = '';
+    elements.forEach((el) => {
+      const isSelected = el.id === dBselectedBlockId;
+      const indent = depth * 14;
+      const icon = dBgetIcon(el.type) || '■';
+      
+      treeHtml += `<div class="layers-tree-item" onclick="event.stopPropagation(); dBselectBlock('${el.id}')" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; margin-bottom:2px; font-size:0.76rem; cursor:pointer; font-weight:500; margin-left:${indent}px; background:${isSelected ? 'rgba(99,102,241,0.1)' : 'transparent'}; border:1px solid ${isSelected ? 'rgba(99,102,241,0.25)' : 'transparent'}; transition:all 0.15s; color:${isSelected ? 'var(--primary)' : 'var(--text-secondary)'};">`;
+      treeHtml += `<span style="font-size:0.85rem; flex-shrink:0;">${icon}</span>`;
+      treeHtml += `<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(el.label || el.type)}</span>`;
+      treeHtml += `<button onclick="event.stopPropagation(); dBremoveBlock('${el.id}')" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:0.7rem; padding:2px; line-height:1; display:flex; align-items:center; opacity:0.6;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">✕</button>`;
+      treeHtml += '</div>';
+      
+      if (el.children && Array.isArray(el.children) && el.children.length > 0) {
+        treeHtml += buildTreeHtml(el.children, depth + 1);
+      }
+    });
+    return treeHtml;
+  }
+  
+  html += buildTreeHtml(page.elements);
+  container.innerHTML = html;
+}
+window.renderDBuilderLayersTree = renderDBuilderLayersTree;
+
+function dBswitchPropTab(tab) {
+  dBactivePropTab = tab;
+  const btnProps = document.getElementById('btnPropTabProps');
+  const btnStyles = document.getElementById('btnPropTabStyles');
+  const btnInteractions = document.getElementById('btnPropTabInteractions');
+  
+  if (btnProps && btnStyles && btnInteractions) {
+    [btnProps, btnStyles, btnInteractions].forEach(btn => {
+      btn.classList.remove('active');
+      btn.style.color = 'var(--text-muted)';
+      btn.style.borderBottom = '2px solid transparent';
+    });
+    
+    let activeBtn;
+    if (tab === 'props') activeBtn = btnProps;
+    else if (tab === 'styles') activeBtn = btnStyles;
+    else if (tab === 'interactions') activeBtn = btnInteractions;
+    
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.style.color = 'var(--text)';
+      activeBtn.style.borderBottom = '2px solid var(--primary)';
+    }
+  }
+  
+  renderDBuilderProps();
+}
+window.dBswitchPropTab = dBswitchPropTab;
+
+function dBpushHistory() {
+  if (dBhistoryIndex < dBhistory.length - 1) {
+    dBhistory = dBhistory.slice(0, dBhistoryIndex + 1);
+  }
+  const snapshot = JSON.parse(JSON.stringify(dBpages));
+  dBhistory.push(snapshot);
+  if (dBhistory.length > 50) {
+    dBhistory.shift();
+  }
+  dBhistoryIndex = dBhistory.length - 1;
+  
+  // Track unsaved state and save local draft (ignore first initialization push)
+  if (dBhistoryIndex > 0) {
+    debouncedSaveBuilder();
+    window.dBhasUnpublishedChanges = true;
+    updatePublishButtonUI();
+  }
+}
+window.dBpushHistory = dBpushHistory;
+
+function dBUndo() {
+  if (dBhistoryIndex > 0) {
+    dBhistoryIndex--;
+    dBpages = JSON.parse(JSON.stringify(dBhistory[dBhistoryIndex]));
+    if (!dBpages.some(p => p.id === dBactivePageId) && dBpages.length > 0) {
+      dBactivePageId = dBpages[0].id;
+    }
+    dBselectedBlockId = null;
+    renderDashboardBuilder();
+    renderDBuilderLayersTree();
+    dBconsoleLog("Undo: Reverted canvas configuration to previous state", "info");
+  } else {
+    toast("Nothing to Undo");
+  }
+}
+window.dBUndo = dBUndo;
+
+function dBRedo() {
+  if (dBhistoryIndex < dBhistory.length - 1) {
+    dBhistoryIndex++;
+    dBpages = JSON.parse(JSON.stringify(dBhistory[dBhistoryIndex]));
+    if (!dBpages.some(p => p.id === dBactivePageId) && dBpages.length > 0) {
+      dBactivePageId = dBpages[0].id;
+    }
+    dBselectedBlockId = null;
+    renderDashboardBuilder();
+    renderDBuilderLayersTree();
+    dBconsoleLog("Redo: Re-applied configuration state", "info");
+  } else {
+    toast("Nothing to Redo");
+  }
+}
+window.dBRedo = dBRedo;
+
+function dBconsoleLog(message, type = 'info') {
+  const consoleLogs = document.getElementById('dbuilderConsoleLogs');
+  if (!consoleLogs) return;
+  if (consoleLogs.innerHTML.includes('Listening for simulator user interactions...')) {
+    consoleLogs.innerHTML = '';
+  }
+  const now = new Date();
+  const timeStr = now.toTimeString().split(' ')[0];
+  const colorMap = {
+    info: '#a5b4fc',
+    success: '#22d06c',
+    warning: '#fbbf24',
+    error: '#ef4444'
+  };
+  const color = colorMap[type] || '#a5b4fc';
+  const logLine = document.createElement('div');
+  logLine.style.marginBottom = '4px';
+  logLine.style.color = color;
+  logLine.innerHTML = `<span style="color:var(--text-muted); font-size:0.68rem; margin-right:8px;">[${timeStr}]</span> ${esc(message)}`;
+  consoleLogs.appendChild(logLine);
+  consoleLogs.scrollTop = consoleLogs.scrollHeight;
+}
+window.dBconsoleLog = dBconsoleLog;
+
+function dBTogglePreviewMode() {
+  const layout = document.getElementById('dbuilderLayout');
+  const btn = document.getElementById('btnPreviewMode');
+  const palette = document.getElementById('dbuilderPalette');
+  const props = document.getElementById('dbuilderProps');
+  const canvasWrap = document.querySelector('.dbuilder-canvas-wrap');
+  const canvasHeader = document.querySelector('.dbuilder-canvas-header');
+  const phoneFrame = document.querySelector('.dbuilder-phone-frame');
+  if (!layout || !btn) return;
+  
+  layout.classList.toggle('preview-mode');
+  const isPreview = layout.classList.contains('preview-mode');
+  
+  if (isPreview) {
+    layout.style.position = 'relative';
+    if(palette) palette.style.display = 'none';
+    if(props) props.style.display = 'none';
+    
+    if(canvasHeader) {
+      canvasHeader.style.position = 'absolute';
+      canvasHeader.style.top = '0';
+      canvasHeader.style.left = '0';
+      canvasHeader.style.width = '100%';
+      canvasHeader.style.zIndex = '100';
+      canvasHeader.style.justifyContent = 'center';
+    }
+    
+    if(phoneFrame) {
+      phoneFrame.style.position = 'absolute';
+      phoneFrame.style.top = '0';
+      phoneFrame.style.left = '0';
+      phoneFrame.style.width = '100%';
+      phoneFrame.style.height = '100%';
+      phoneFrame.style.zIndex = '90';
+    }
+
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg> Exit Preview';
+    btn.style.background = 'var(--primary)';
+    btn.style.color = '#ffffff';
+    btn.style.borderColor = 'var(--primary)';
+    if (window.toast) window.toast('Preview Mode: Editing tools hidden.', 'success');
+  } else {
+    layout.style.position = '';
+    if(palette) palette.style.display = '';
+    if(props) props.style.display = '';
+    
+    if(canvasHeader) {
+      canvasHeader.style.position = '';
+      canvasHeader.style.top = '';
+      canvasHeader.style.left = '';
+      canvasHeader.style.width = '';
+      canvasHeader.style.zIndex = '';
+      canvasHeader.style.justifyContent = '';
+    }
+    
+    if(phoneFrame) {
+      phoneFrame.style.position = '';
+      phoneFrame.style.top = '';
+      phoneFrame.style.left = '';
+      phoneFrame.style.width = '';
+      phoneFrame.style.height = '';
+      phoneFrame.style.zIndex = '';
+    }
+
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Play Preview';
+    btn.style.background = 'var(--bg-surface)';
+    btn.style.color = 'var(--text)';
+    btn.style.borderColor = 'var(--border)';
+  }
+}
+window.dBTogglePreviewMode = dBTogglePreviewMode;
+
+function dBToggleConsole() {
+  const consoleEl = document.getElementById('dbuilderSimulatorConsole');
+  const btn = document.getElementById('btnToggleConsole');
+  if (consoleEl && btn) {
+    if (consoleEl.style.display === 'none') {
+      consoleEl.style.display = 'flex';
+      btn.classList.add('active');
+      btn.style.background = 'var(--primary)';
+      btn.style.color = '#ffffff';
+    } else {
+      consoleEl.style.display = 'none';
+      btn.classList.remove('active');
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-muted)';
+    }
+  }
+}
+window.dBToggleConsole = dBToggleConsole;
+
+function dBclearConsole() {
+  const consoleLogs = document.getElementById('dbuilderConsoleLogs');
+  if (consoleLogs) {
+    consoleLogs.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">Console cleared. Listening for simulator user interactions...</div>';
+  }
+}
+window.dBclearConsole = dBclearConsole;
+
 window.dBaddPage = dBaddPage;
 window.dBselectPage = dBselectPage;
 window.dBaddBlock = dBaddBlock;
 window.dBduplicateBlock = dBduplicateBlock;
 window.dBaddChildBlock = dBaddChildBlock;
-window.dBselectBlock = dBselectBlock;
 window.dBselectBlock = dBselectBlock;
 window.dBremoveBlock = dBremoveBlock;
 window.dBmoveBlock = dBmoveBlock;
@@ -743,6 +1495,27 @@ window.dBupdateStyle = dBupdateStyle;
 window.dBupdateLabel = dBupdateLabel;
 window.dBupdateAction = dBupdateAction;
 window.dbuilderFilterPalette = dbuilderFilterPalette;
+
+async function publishBuilderUpdate() {
+  try {
+    const cfg = (appData && appData.config) || {};
+    const pc = cfg.project_config || {};
+    pc.pages = dBpages;
+    cfg.project_config = pc;
+    await api('PUT', '/apps/' + appId, cfg);
+    appData = await api('GET', '/apps/' + appId);
+    
+    // Now trigger the actual Expo EAS publish OTA
+    await triggerOtaUpdate();
+    
+    window.dBhasUnpublishedChanges = false;
+    updatePublishButtonUI();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+window.publishBuilderUpdate = publishBuilderUpdate;
+
 async function saveDashboardBuilder() {
   try {
     const app = await api('GET', '/apps/' + appId);
@@ -751,6 +1524,10 @@ async function saveDashboardBuilder() {
     pc.pages = dBpages;
     cfg.project_config = pc;
     await api('PUT', '/apps/' + appId, cfg);
+    
+    window.dBunsavedChanges = false;
+    updateBuilderSaveButton();
+    
     toast('Builder changes saved!');
     appData = await api('GET', '/apps/' + appId);
     loadPages();
@@ -778,7 +1555,7 @@ async function loadAppMenu() {
     menuItems = (nav.config || []).map(item => ({
       id: item.id || 'mi_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       label: item.label || 'Tab',
-      icon: item.icon || '📱',
+      icon: item.icon || '⌂',
       targetPageId: item.targetPageId || '',
     }));
     renderAppMenu();
@@ -827,7 +1604,7 @@ function renderAppMenu() {
   container.innerHTML = menuItems.map((item, i) =>
     '<div class="menu-item-card">' +
     '<div class="menu-item-drag" title="Drag to reorder">⠿</div>' +
-    '<div class="menu-item-icon-wrap" onclick="showEmojiPicker(this,' + i + ')" style="cursor:pointer">' + esc(item.icon || '📱') + '</div>' +
+    '<div class="menu-item-icon-wrap" onclick="showEmojiPicker(this,' + i + ')" style="cursor:pointer">' + esc(item.icon || '⌂') + '</div>' +
     '<div class="menu-item-fields">' +
     '<input type="text" value="' + esc(item.label) + '" placeholder="Tab label" onchange="updateMenuItem(' + i + ',\'label\',this.value)">' +
     '<select onchange="updateMenuItem(' + i + ',\'targetPageId\',this.value)">' +
@@ -863,7 +1640,7 @@ function renderMenuPreview() {
     '<div class="menu-preview-tabbar">' +
     menuItems.map((item, i) =>
       '<div class="menu-preview-tab' + (i === 0 ? ' active' : '') + '">' +
-      '<span class="tab-icon">' + esc(item.icon || '📱') + '</span>' +
+      '<span class="tab-icon">' + esc(item.icon || '⌂') + '</span>' +
       '<span class="tab-label">' + esc(item.label || 'Tab') + '</span>' +
       '</div>'
     ).join('') +
@@ -882,7 +1659,7 @@ function addMenuItem() {
   let pages = [];
   try { if (dBpages && dBpages.length) pages = dBpages; } catch (e) {}
   if (!pages.length && appData && appData.config) { try { const pc = appData.config.project_config; if (pc && pc.pages) pages = pc.pages; } catch (e) {} }
-  menuItems.push({ id: 'mi_' + Date.now(), label: 'Tab ' + (menuItems.length + 1), icon: '📱', targetPageId: pages.length > 0 ? pages[0].id : '' });
+  menuItems.push({ id: 'mi_' + Date.now(), label: 'Tab ' + (menuItems.length + 1), icon: '⌂', targetPageId: pages.length > 0 ? pages[0].id : '' });
   renderAppMenu();
 }
 window.addMenuItem = addMenuItem;
@@ -894,7 +1671,7 @@ function updateMenuItem(idx, key, value) {
 }
 window.updateMenuItem = updateMenuItem;
 
-const TAB_EMOJIS = ['🏠','🔍','❤️','⭐','🔥','💬','📷','🎵','🛒','👤','⚙️','📱','💼','🎯','📅','📍','🏷️','🔄','📊','🎮','📚','✉️','🔔','🌙','☀️','🍔','🎬','🏆','💡','🎨','📝','🔒','🎉','🚀','💎','🌈','🎁','🔑'];
+const TAB_EMOJIS = ['⌂', '⌕', '♡', '☆', '✦', '❖', '✉', '☏', '⚙', '▤', '📅', '⌖', '⚏', '☷', '⬚', '▲', '▼', '■', '▢', '○', '◇', '◈', '☼', '☾', '⚿', '✎', '⏏', '⎘', '⎗'];
 
 function showEmojiPicker(anchor, idx) {
   const existing = document.getElementById('emojiPickerPopup');
@@ -1106,17 +1883,190 @@ async function loadPublished() {
   }
 }
 
+// ── QR Connection state variables ──
+let qrConnectionMode = 'lan'; // 'lan', 'local', 'tunnel'
+let qrCustomIp = '';
+let qrCustomTunnel = '';
+let qrLocalIp = '';
+let qrAppSlug = '';
+let qrActiveTab = 'expo-go'; // 'expo-go' or 'dev-build'
+
+function switchQrTab(tab) {
+  qrActiveTab = tab;
+  loadQR();
+}
+window.switchQrTab = switchQrTab;
+
+function switchQrConnection(mode) {
+  qrConnectionMode = mode;
+  loadQR();
+}
+window.switchQrConnection = switchQrConnection;
+
+function toggleCustomIpEdit() {
+  const el = document.getElementById('customIpEditBox');
+  if (el) {
+    el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+    if (el.style.display === 'flex') {
+      document.getElementById('customIpInput').focus();
+    }
+  }
+}
+window.toggleCustomIpEdit = toggleCustomIpEdit;
+
+function saveCustomIp() {
+  const val = document.getElementById('customIpInput').value.trim();
+  if (val) {
+    qrCustomIp = val;
+    loadQR();
+  }
+}
+window.saveCustomIp = saveCustomIp;
+
+function saveCustomTunnel() {
+  const val = document.getElementById('customTunnelInput').value.trim();
+  if (val) {
+    qrCustomTunnel = val;
+    loadQR();
+  }
+}
+window.saveCustomTunnel = saveCustomTunnel;
+
+async function copyQrLink(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const copyBtn = document.getElementById('copyLinkBtn');
+    if (copyBtn) {
+      const originalHtml = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3" style="margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:0.75rem; font-weight:600; color:#22c55e;">Copied!</span>';
+      setTimeout(() => {
+        copyBtn.innerHTML = originalHtml;
+      }, 2000);
+    }
+  } catch (err) {
+    toast('Failed to copy', 'error');
+  }
+}
+window.copyQrLink = copyQrLink;
+
 async function loadQR() {
   const container = document.getElementById('qrContainer');
+  if (!container) return;
+  
   try {
-    const res = await api('GET', '/apps/' + appId + '/qr');
-    container.innerHTML = '<img src="' + esc(res.qr_code) + '" alt="QR Code">' +
-      '<div class="qr-label">' + esc(res.config_url || 'Config URL') + '</div>';
+    // Generate URL based on selected connection mode
+    let targetUrl = '';
+    
+    if (qrActiveTab === 'expo-go') {
+      if (qrConnectionMode === 'lan') {
+        const ip = qrCustomIp || qrLocalIp || '127.0.0.1';
+        targetUrl = 'exp://' + ip + ':8081';
+      } else if (qrConnectionMode === 'local') {
+        targetUrl = 'exp://localhost:8081';
+      } else if (qrConnectionMode === 'tunnel') {
+        targetUrl = qrCustomTunnel || ('exp://u.expo.dev/' + (qrAppSlug || appId));
+      }
+    } else {
+      // Dev build tab
+      targetUrl = 'https://expo.dev/artifacts/' + appId;
+    }
+
+    // Call backend API with custom URL
+    const queryParam = '?url=' + encodeURIComponent(targetUrl);
+    const res = await api('GET', '/apps/' + appId + '/qr' + queryParam);
+    
+    // Cache the resolved values if first time
+    if (!qrLocalIp && res.local_ip) qrLocalIp = res.local_ip;
+    if (!qrAppSlug && res.slug) qrAppSlug = res.slug;
+
+    // Render interactive premium UI!
+    let html = '';
+    
+    // Tab toggles: Expo Go vs Development Build
+    html += '<div style="display:flex; border-bottom:1px solid var(--border); margin-bottom:20px; background:var(--bg-hover); border-radius:10px; padding:4px;">' +
+      '<button class="qr-tab-btn' + (qrActiveTab === 'expo-go' ? ' active' : '') + '" onclick="switchQrTab(\'expo-go\')" style="flex:1; border:none; background:' + (qrActiveTab === 'expo-go' ? 'var(--bg-card)' : 'transparent') + '; color:' + (qrActiveTab === 'expo-go' ? 'var(--text)' : 'var(--text-secondary)') + '; font-size:0.82rem; font-weight:600; padding:8px 12px; border-radius:8px; cursor:pointer; transition:all 0.2s; box-shadow:' + (qrActiveTab === 'expo-go' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none') + ';">Expo Go</button>' +
+      '<button class="qr-tab-btn' + (qrActiveTab === 'dev-build' ? ' active' : '') + '" onclick="switchQrTab(\'dev-build\')" style="flex:1; border:none; background:' + (qrActiveTab === 'dev-build' ? 'var(--bg-card)' : 'transparent') + '; color:' + (qrActiveTab === 'dev-build' ? 'var(--text)' : 'var(--text-secondary)') + '; font-size:0.82rem; font-weight:600; padding:8px 12px; border-radius:8px; cursor:pointer; transition:all 0.2s; box-shadow:' + (qrActiveTab === 'dev-build' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none') + ';">Development Build</button>' +
+      '</div>';
+
+    if (qrActiveTab === 'expo-go') {
+      // Pills for LAN, Local, Tunnel
+      html += '<div style="display:flex; justify-content:center; gap:8px; margin-bottom:20px;">' +
+        '<button class="qr-pill-btn' + (qrConnectionMode === 'lan' ? ' active' : '') + '" onclick="switchQrConnection(\'lan\')">LAN</button>' +
+        '<button class="qr-pill-btn' + (qrConnectionMode === 'local' ? ' active' : '') + '" onclick="switchQrConnection(\'local\')">Local</button>' +
+        '<button class="qr-pill-btn' + (qrConnectionMode === 'tunnel' ? ' active' : '') + '" onclick="switchQrConnection(\'tunnel\')">Tunnel</button>' +
+        '</div>';
+
+      // QR Image in beautiful white high-contrast card
+      html += '<div style="background:#ffffff; padding:20px; border-radius:16px; display:inline-block; box-shadow:0 12px 32px rgba(0,0,0,0.08); border:1px solid #e2e8f0; margin-bottom:20px; position:relative;">' +
+        '<img src="' + esc(res.qr_code) + '" alt="QR Code" style="width:200px; height:200px; display:block; filter: contrast(1.1);">' +
+        // Add Expo Logo inside the QR code center for premium look!
+        '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#ffffff; width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,0.1); border:1px solid #e2e8f0;">' +
+          '<svg viewBox="0 0 24 24" width="22" height="22" fill="#000000"><path d="M12.016 1.344L1.76 6.848v10.976l10.256 5.504 10.224-5.504V6.848zm0 2.256l8.112 4.368-8.112 4.368-8.128-4.368zm-8.128 6.624l8.128 4.368v8.736l-8.128-4.368zm16.24 0v8.736l-8.112 4.368v-8.736z"/></svg>' +
+        '</div>' +
+        '</div>';
+
+      // Scan Instructions
+      html += '<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:16px; font-weight:500;">Scan with the <strong style="color:var(--text)">Expo Go app</strong> on iOS or Android</div>';
+
+      // Dynamic options: Custom IP input or Tunnel input
+      if (qrConnectionMode === 'lan') {
+        const ipVal = qrCustomIp || qrLocalIp || '127.0.0.1';
+        html += '<div style="margin-bottom:16px; display:flex; flex-direction:column; gap:6px; align-items:center;">' +
+          '<div style="font-size:0.75rem; color:var(--text-muted); display:flex; align-items:center; gap:6px;">' +
+            '<span>IP Address: <strong>' + esc(ipVal) + '</strong></span>' +
+            '<button onclick="toggleCustomIpEdit()" class="btn-text-edit" style="background:transparent; border:none; color:var(--primary); font-size:0.72rem; cursor:pointer; font-weight:600; padding:0 4px; display:flex; align-items:center; gap:2px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit</button>' +
+          '</div>' +
+          '<div id="customIpEditBox" style="display:none; gap:6px; margin-top:4px; max-width:260px; width:100%;">' +
+            '<input type="text" id="customIpInput" class="form-input" style="padding:6px 10px; font-size:0.8rem; flex:1; height:32px; background:var(--bg-input); border:1px solid var(--border); border-radius:8px; color:var(--text);" value="' + esc(ipVal) + '" placeholder="e.g. 192.168.1.50">' +
+            '<button onclick="saveCustomIp()" class="btn btn-sm btn-primary" style="padding:0 12px; height:32px; font-size:0.78rem;">Save</button>' +
+          '</div>' +
+        '</div>';
+      } else if (qrConnectionMode === 'tunnel') {
+        const tunnelVal = qrCustomTunnel || '';
+        html += '<div style="margin-bottom:16px; display:flex; flex-direction:column; gap:6px; align-items:center; max-width:280px; margin-left:auto; margin-right:auto;">' +
+          '<div style="font-size:0.75rem; color:var(--text-muted);">Custom Tunnel URL:</div>' +
+          '<div style="display:flex; gap:6px; width:100%;">' +
+            '<input type="text" id="customTunnelInput" class="form-input" style="padding:6px 10px; font-size:0.8rem; flex:1; height:32px; background:var(--bg-input); border:1px solid var(--border); border-radius:8px; color:var(--text);" value="' + esc(tunnelVal) + '" placeholder="exp://123.ngrok.io" onchange="saveCustomTunnel()">' +
+            '<button onclick="saveCustomTunnel()" class="btn btn-sm btn-primary" style="padding:0 12px; height:32px; font-size:0.78rem;">Apply</button>' +
+          '</div>' +
+        '</div>';
+      }
+
+      // Clipboard Copier field!
+      html += '<div style="position:relative; max-width:320px; margin:0 auto; display:flex; align-items:center; border:1px solid var(--border); background:var(--bg-input); border-radius:10px; overflow:hidden; box-shadow:inset 0 1px 3px rgba(0,0,0,0.05);">' +
+        '<span style="font-family:monospace; font-size:0.75rem; color:var(--text-secondary); padding:8px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; text-align:left;">' + esc(targetUrl) + '</span>' +
+        '<button onclick="copyQrLink(\'' + esc(targetUrl.replace(/'/g, "\\'")) + '\')" style="background:var(--bg-hover); border:none; border-left:1px solid var(--border); padding:8px 14px; cursor:pointer; color:var(--text); display:flex; align-items:center; transition:background 0.2s;" id="copyLinkBtn" title="Copy URL">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+          '<span style="font-size:0.75rem; font-weight:600;">Copy</span>' +
+        '</button>' +
+        '</div>';
+
+    } else {
+      // Development Build instructions & links
+      html += '<div style="padding:10px 15px; text-align:left; color:var(--text-secondary); line-height:1.5; font-size:0.82rem;">' +
+        '<div style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15); border-radius:10px; padding:12px; margin-bottom:16px;">' +
+          '<div style="color:var(--primary); font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:6px;">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+            'About Development Builds' +
+          '</div>' +
+          'Development builds are customized standalone binaries built using <strong style="color:var(--text)">EAS Build</strong>. Unlike Expo Go, they include your custom e-commerce client modules and credentials.' +
+        '</div>' +
+        '<h4 style="font-size:0.85rem; font-weight:600; color:var(--text); margin:0 0 8px 0;">How to run:</h4>' +
+        '<ol style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:8px;">' +
+          '<li>Go to the <strong>Builds</strong> tab in the sidebar and launch a live cloud build.</li>' +
+          '<li>Once compiled, download the custom APK (Android) or ZIP (iOS Simulator) binary.</li>' +
+          '<li>Install the build on your device or simulator to run and test live Shopify or WooCommerce configurations.</li>' +
+        '</ol>' +
+        '</div>';
+    }
+
+    container.innerHTML = html;
+
   } catch (err) {
     // QR endpoint may fail if no published version — show publish hint
     container.innerHTML = '<div style="padding:16px;text-align:center">' +
       '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-muted);margin-bottom:8px"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="5" y="5" width="4" height="4"/><rect x="15" y="5" width="4" height="4"/><rect x="5" y="15" width="4" height="4"/><rect x="15" y="15" width="4" height="4"/></svg>' +
-      '<div style="font-size:0.78rem;color:var(--text-muted)">Publish to see QR</div></div>';
+      '<div style="font-size:0.78rem;color:var(--text-muted)">Publish to see QR code</div></div>';
   }
 }
 
@@ -1265,7 +2215,7 @@ async function createPage() {
   const pages = pc.pages || [];
 
   const newId = 'page_' + Date.now();
-  pages.push({ id: newId, name, icon: '📄', elements: [] });
+  pages.push({ id: newId, name, icon: '▤', elements: [] });
   pc.pages = pages;
   cfg.project_config = pc;
 
@@ -1619,7 +2569,7 @@ async function sendPushNotification() {
     btn.disabled = true;
 
     // Call backend
-    await api('POST', '/push/send', { to: "ExponentPushToken[Broadcast]", title, body: bodyTxt });
+    await api('POST', '/push/send', { to: "ExponentPushToken[Broadcast]", title, body: bodyTxt, app_id: appId });
     
     // Store in history
     if (!appData.config) appData.config = {};
@@ -2440,3 +3390,40 @@ window.loadBilling = loadBilling;
 window.openBillingPortal = openBillingPortal;
 window.changePlan = changePlan;
 window.submitBillingUpgrade = submitBillingUpgrade;
+
+function dBhandleMediaUpload(elId, inputElem, maxMb, append) {
+  if (!inputElem || !inputElem.files || inputElem.files.length === 0) return;
+  
+  const file = inputElem.files[0];
+  const maxBytes = maxMb * 1024 * 1024;
+  if (file.size > maxBytes) {
+    toast('File too large! Maximum limit is ' + maxMb + 'MB.', 'error');
+    inputElem.value = ''; // reset
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64Data = e.target.result;
+    
+    // Check if we are appending to a comma-separated list (like carousel)
+    if (append) {
+      const page = dBpages.find(p => p.id === dBactivePageId);
+      if (page) {
+        const found = dBfindInList(elId, page.elements);
+        if (found) {
+          const currentSrc = found.block.properties.src || '';
+          const newSrc = currentSrc ? currentSrc + ',' + base64Data : base64Data;
+          dBupdateProp(elId, 'src', newSrc);
+        }
+      }
+    } else {
+      dBupdateProp(elId, 'src', base64Data);
+    }
+    
+    toast('File uploaded successfully!', 'success');
+    inputElem.value = ''; // reset so they can upload the same file again if they want
+  };
+  reader.readAsDataURL(file);
+}
+window.dBhandleMediaUpload = dBhandleMediaUpload;

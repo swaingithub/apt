@@ -19,15 +19,6 @@
         "backgroundColor": "#2563eb"
       },
       "versionCode": 4
-    },
-    "updates": {
-      "fallbackToCacheTimeout": 0
-    },
-    "extra": {
-      "eas": {
-        "projectId": "0d354949-406b-44d6-844e-75b93c164058"
-      }
-    },
-    "owner": "rakesh002"
+    }
   }
 }

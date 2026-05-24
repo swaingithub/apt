@@ -4,9 +4,26 @@ use crate::db::Database;
 use crate::models::ErrorResponse;
 use crate::services::qr_generator::QRGenerator;
 
+#[derive(serde::Deserialize)]
+pub struct QRQuery {
+    pub url: Option<String>,
+}
+
+fn get_local_ip() -> String {
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                return addr.ip().to_string();
+            }
+        }
+    }
+    "127.0.0.1".to_string()
+}
+
 pub async fn get_qr_code(
     req: HttpRequest,
     path: web::Path<String>,
+    query: web::Query<QRQuery>,
     db: web::Data<Database>,
 ) -> HttpResponse {
     let app_id = path.into_inner();
@@ -30,12 +47,20 @@ pub async fn get_qr_code(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost:8080");
     let scheme = if req.headers().get("X-Forwarded-Proto").and_then(|v| v.to_str().ok()) == Some("https") { "https" } else { "http" };
+    
+    let local_ip = get_local_ip();
+    let expo_url = match &query.url {
+        Some(u) => u.clone(),
+        None => format!("exp://{}:8081", local_ip),
+    };
     let config_url = format!("{}://{}/api/v1/config/{}", scheme, host, slug);
 
-    match QRGenerator::generate_expo_qr(&config_url) {
+    match QRGenerator::generate_expo_qr(&expo_url) {
         Ok(qr_data_url) => HttpResponse::Ok().json(serde_json::json!({
             "qr_code": qr_data_url,
             "config_url": config_url,
+            "expo_url": expo_url,
+            "local_ip": local_ip,
             "app_name": app_name,
             "slug": slug,
         })),
