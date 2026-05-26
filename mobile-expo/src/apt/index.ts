@@ -6,5 +6,7 @@ export { blockRegistry } from './BlockRegistry';
 export { registerAction, createActionHandler } from './ActionHandler';
 export { registerTheme, activateThemes } from './ThemeRegistry';
 export { ConfigProvider, useConfig } from './ConfigProvider';
+export { matchUrl, buildDeepLink } from './routing';
+export type { RouteConfig, ParsedRoute } from './routing';
 export type { RuntimeConfig } from './ConfigProvider';
 export type { ProjectConfig, AppElement, AppAction, Collection, ThemeConfig } from './types';

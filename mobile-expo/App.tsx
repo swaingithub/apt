@@ -1,12 +1,29 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AptApp, ConfigProvider, useConfig } from './src/apt';
 import { config as localConfig, activate } from './src/theme';
 
 // Activate theme on startup
 activate({ settings: localConfig as any });
 
+// Initialize third-party SDK integrations on startup
+function useIntegrations() {
+  useEffect(() => {
+    (async () => {
+      try {
+        const mod = await import('./src/apt/integrations');
+        if (typeof mod.initializeIntegrations === 'function') {
+          await mod.initializeIntegrations();
+        }
+      } catch {
+        // integrations.ts may be a comment-only file when no SDKs are enabled
+      }
+    })();
+  }, []);
+}
+
 function AppInner() {
   const { config: remoteConfig, isLoading, error } = useConfig();
+  useIntegrations();
 
   if (isLoading && !remoteConfig) {
     return <AptApp config={localConfig} />;
@@ -34,6 +51,8 @@ function AppInner() {
         }))
       : localConfig.pages;
 
+    const remoteRouting = remoteConfig.routing || null;
+
     const mergedConfig: import('./src/apt/types').ProjectConfig = {
       appName: remoteConfig.project?.name || localConfig.appName,
       homePageId: remotePages[0]?.id || localConfig.homePageId,
@@ -47,7 +66,7 @@ function AppInner() {
       },
       build: localConfig.build,
     };
-    return <AptApp config={mergedConfig} />;
+    return <AptApp config={mergedConfig} routing={remoteRouting} />;
   }
 
   return <AptApp config={localConfig} />;

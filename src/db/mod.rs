@@ -173,6 +173,7 @@ impl Database {
     }
 }
 
+pub mod analytics;
 pub mod users;
 pub mod projects;
 pub mod builds;

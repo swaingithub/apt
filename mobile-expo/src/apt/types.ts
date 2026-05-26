@@ -4,7 +4,8 @@ export type ElementType =
   | 'container' | 'grid' | 'card' | 'tabs' | 'text' | 'heading'
   | 'image' | 'divider' | 'button' | 'icon' | 'input' | 'select'
   | 'checkbox' | 'textarea' | 'switch' | 'table' | 'carousel'
-  | 'chart' | 'map' | 'video';
+  | 'chart' | 'map' | 'video'
+  | 'shopify_grid' | 'woo_grid' | 'cart_button';
 
 export interface AppAction {
   type: ActionType;

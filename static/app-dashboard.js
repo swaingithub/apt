@@ -24,9 +24,9 @@ function authHeaders() {
   return h;
 }
 
-async function api(method, path, body) {
+async function api(method, path, body, retries = 1) {
   const ac = new AbortController();
-  const tid = setTimeout(() => ac.abort(), 10000);
+  const tid = setTimeout(() => ac.abort(), 15000);
   try {
     const res = await fetch(API + path, { method, headers: authHeaders(), body: body ? JSON.stringify(body) : undefined, signal: ac.signal });
     clearTimeout(tid);
@@ -58,7 +58,27 @@ async function api(method, path, body) {
     return data;
   } catch (e) {
     clearTimeout(tid);
+    if (retries > 0 && (e.name === 'TypeError' || e.name === 'AbortError' || e.message?.includes('Failed to fetch'))) {
+      await new Promise(r => setTimeout(r, 1000));
+      return api(method, path, body, retries - 1);
+    }
     throw e;
+  }
+}
+
+function setLoading(el, loading) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  if (loading) {
+    el._origHtml = el.innerHTML;
+    el._origDisabled = el.disabled;
+    el.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> ' + (el.getAttribute('data-loading-text') || 'Loading...');
+    el.disabled = true;
+  } else if (el._origHtml) {
+    el.innerHTML = el._origHtml;
+    el.disabled = el._origDisabled || false;
+    delete el._origHtml;
+    delete el._origDisabled;
   }
 }
 
@@ -70,7 +90,171 @@ function toast(text, type) {
   setTimeout(() => el.remove(), 3500);
 }
 
+function showError(containerId, msg, retryFnName) {
+  const el = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
+  if (!el) return;
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--danger);font-size:0.85rem;">' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:block;margin:0 auto 8px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' +
+    esc(msg) +
+    (retryFnName ? '<br><button class="btn btn-sm" onclick="' + retryFnName + '()" style="margin-top:10px;">Retry</button>' : '') +
+    '</div>';
+}
+
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ── Real-time Collaboration WebSocket ──
+let previewWS = null;
+let previewReconnectTimer = null;
+let collabOnlineUsers = [];
+let collabUserId = null;
+
+function getCollabUserInfo() {
+  let name = 'Anonymous';
+  let avatarColor = '#6366f1';
+  try {
+    const fbUser = firebase.auth().currentUser;
+    if (fbUser) {
+      name = fbUser.displayName || fbUser.email || name;
+    }
+  } catch (e) {}
+  const stored = localStorage.getItem('apt_user_name');
+  if (stored) name = stored;
+  const hash = name.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+  const colors = ['#6366f1','#22d06c','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#8b5cf6'];
+  avatarColor = colors[Math.abs(hash) % colors.length];
+  collabUserId = 'user_' + Math.abs(hash).toString(36) + '_' + Date.now().toString(36);
+  return { id: collabUserId, name, avatar_color: avatarColor };
+}
+
+function connectPreviewWS(appId) {
+  disconnectPreviewWS();
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  const url = proto + '//' + host + '/ws/preview/' + encodeURIComponent(appId);
+  try {
+    previewWS = new WebSocket(url);
+    previewWS.onopen = () => {
+      console.log('[Collab] WebSocket connected');
+      const userInfo = getCollabUserInfo();
+      previewWS.send(JSON.stringify({ type: 'join', user: userInfo }));
+    };
+    previewWS.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        handleCollabMessage(data);
+      } catch (err) {
+        console.warn('[Collab] Failed to parse message:', err);
+      }
+    };
+    previewWS.onclose = () => {
+      console.log('[Collab] WebSocket disconnected, reconnecting in 3s...');
+      previewReconnectTimer = setTimeout(() => connectPreviewWS(appId), 3000);
+    };
+    previewWS.onerror = () => previewWS && previewWS.close();
+  } catch (e) {
+    console.warn('[Collab] WebSocket connection failed:', e);
+  }
+}
+
+function disconnectPreviewWS() {
+  if (previewReconnectTimer) { clearTimeout(previewReconnectTimer); previewReconnectTimer = null; }
+  if (previewWS) {
+    if (previewWS.readyState === WebSocket.OPEN) {
+      previewWS.send(JSON.stringify({ type: 'leave' }));
+    }
+    previewWS.onclose = null;
+    previewWS.close();
+    previewWS = null;
+  }
+  collabOnlineUsers = [];
+  renderCollabUsers();
+}
+
+// Send leave on page unload
+window.addEventListener('beforeunload', function() {
+  if (previewWS && previewWS.readyState === WebSocket.OPEN) {
+    previewWS.send(JSON.stringify({ type: 'leave' }));
+  }
+});
+
+function sendPreviewUpdate() {
+  if (previewWS && previewWS.readyState === WebSocket.OPEN) {
+    previewWS.send(JSON.stringify({ type: 'config_updated', app_id: appId }));
+  }
+}
+
+function handleCollabMessage(data) {
+  switch (data.type) {
+    case 'online_users':
+      collabOnlineUsers = (data.users || []).filter(u => u.id !== collabUserId);
+      renderCollabUsers();
+      break;
+    case 'user_joined':
+      if (data.user && data.user.id !== collabUserId) {
+        collabOnlineUsers = collabOnlineUsers.filter(u => u.id !== data.user.id);
+        collabOnlineUsers.push({ id: data.user.id, name: data.user.name, avatar_color: data.user.avatar_color });
+        renderCollabUsers();
+        toast(data.user.name + ' joined', '');
+      }
+      break;
+    case 'user_left':
+      if (data.userId) {
+        const leftUser = collabOnlineUsers.find(u => u.id === data.userId);
+        collabOnlineUsers = collabOnlineUsers.filter(u => u.id !== data.userId);
+        renderCollabUsers();
+        if (leftUser) toast(leftUser.name + ' left', '');
+      }
+      break;
+    case 'config_updated':
+      // Existing behavior: re-fetch config (handled by auto-save already)
+      break;
+    case 'select':
+      // Highlight the block another user selected (visual awareness)
+      if (data.userId !== collabUserId && data.blockId) {
+        highlightRemoteSelection(data.blockId, data.userId);
+      }
+      break;
+  }
+}
+
+function renderCollabUsers() {
+  const container = document.getElementById('collabUsers');
+  if (!container) return;
+  if (!collabOnlineUsers.length) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'flex';
+  container.innerHTML = collabOnlineUsers.map(u => {
+    const initial = (u.name || '?').charAt(0).toUpperCase();
+    return `<div class="collab-avatar online" style="background:${u.avatar_color || '#6366f1'};">
+      <span>${esc(initial)}</span>
+      <div class="collab-tooltip">${esc(u.name)}</div>
+    </div>`;
+  }).join('') + (collabOnlineUsers.length > 1 ? `<span class="collab-count">+${collabOnlineUsers.length}</span>` : '');
+}
+
+function sendCollabSelect(blockId) {
+  if (previewWS && previewWS.readyState === WebSocket.OPEN) {
+    previewWS.send(JSON.stringify({ type: 'select', blockId }));
+  }
+}
+
+// Visual feedback for remote selection
+let remoteSelectionHighlights = {};
+
+function highlightRemoteSelection(blockId, userId) {
+  if (!blockId) return;
+  const el = document.querySelector(`.dbuilder-block[data-block-id="${blockId}"]`);
+  if (el) {
+    el.style.outline = '2px dashed #22d06c';
+    el.style.outlineOffset = '2px';
+    clearTimeout(remoteSelectionHighlights[userId]);
+    remoteSelectionHighlights[userId] = setTimeout(() => {
+      if (el) { el.style.outline = ''; el.style.outlineOffset = ''; }
+    }, 3000);
+  }
+}
 
 function formatDate(d) { if (!d) return '-'; try { return new Date(d).toLocaleDateString(); } catch { return d; } }
 
@@ -140,6 +324,12 @@ function init() {
     document.getElementById('loadingState').innerHTML = '<p style="color:var(--danger)">No app ID specified. <a href="/" style="color:var(--primary)">Go back</a></p>';
     return;
   }
+  // Show anonymous banner if no token, toggle auth button
+  const isAuthed = !!localStorage.getItem('apt_token');
+  const banner = document.getElementById('dashAnonBanner');
+  if (banner) banner.style.display = isAuthed ? 'none' : 'block';
+  const authText = document.getElementById('dashAuthText');
+  if (authText) authText.textContent = isAuthed ? 'Sign Out' : 'Sign In';
   setTheme(getTheme());
   document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
   loadApp();
@@ -173,7 +363,6 @@ async function loadApp() {
     loadQR();
     loadConfigForm();
     loadBuilds();
-    loadOtaUpdates();
     renderMiniPreview();
   } catch (err) {
     document.getElementById('loadingState').innerHTML = '<p style="color:var(--danger)">Failed to load app: ' + esc(err.message) + ' <a href="/" style="color:var(--primary)">Go back</a></p>';
@@ -183,6 +372,7 @@ async function loadApp() {
 // ── Navigation ──
 
 function switchAppView(view) {
+  document.removeEventListener('keydown', dBkeyboardShortcut);
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelector('.app-view[data-appview="' + view + '"]')?.classList.add('active');
   document.querySelectorAll('.app-nav-item').forEach(b => b.classList.remove('active'));
@@ -193,23 +383,48 @@ function switchAppView(view) {
   } else {
     stopBuildsPoll();
   }
+  if (view === 'profile') {
+    loadProfile();
+  }
   if (view === 'builder') {
     openDashboardBuilder();
   }
   if (view === 'menu') {
     loadAppMenu();
   }
+  refreshAiProviderStatus();
   if (view === 'settings') {
     loadPageAppSettings();
+    const form = document.getElementById('appSettingsForm');
+    if (form) {
+      form.setAttribute('hx-put', '/hx/apps/' + encodeURIComponent(appId) + '/settings');
+      htmx.process(form);
+    }
   }
   if (view === 'push') {
     renderPushHistory();
   }
   if (view === 'themes') {
     loadThemeSettings();
+    const form = document.getElementById('themeForm');
+    if (form) {
+      form.setAttribute('hx-put', '/hx/apps/' + encodeURIComponent(appId) + '/theme');
+      htmx.process(form);
+    }
   }
   if (view === 'languages') {
-    loadLanguages();
+    const tbody = document.getElementById('languages-table-body');
+    if (tbody) {
+      const url = '/hx/apps/' + encodeURIComponent(appId) + '/languages';
+      htmx.ajax('GET', url, { target: '#languages-table-body', swap: 'outerHTML', headers: { 'Authorization': 'Bearer ' + token } });
+    }
+    const addBtn = document.getElementById('addLocaleBtn');
+    if (addBtn) {
+      addBtn.setAttribute('hx-get', '/hx/apps/' + encodeURIComponent(appId) + '/languages/add-form');
+      addBtn.setAttribute('hx-target', '#languages-table-body');
+      addBtn.setAttribute('hx-swap', 'beforeend');
+      htmx.process(addBtn);
+    }
   }
   if (view === 'upload') {
     loadStoreCredentials();
@@ -218,13 +433,72 @@ function switchAppView(view) {
     loadIntegrations();
   }
   if (view === 'update-app') {
-    loadOtaUpdates();
+    const btn = document.querySelector('.app-view[data-appview="update-app"] .btn-primary[hx-post]');
+    if (btn) {
+      btn.setAttribute('hx-post', '/hx/apps/' + encodeURIComponent(appId) + '/ota/trigger');
+      htmx.process(btn);
+    }
+    const list = document.getElementById('otaUpdatesList');
+    if (list) {
+      list.setAttribute('hx-get', '/hx/apps/' + encodeURIComponent(appId) + '/ota');
+      htmx.ajax('GET', list.getAttribute('hx-get'), { target: '#otaUpdatesList', swap: 'innerHTML' });
+    }
   }
   if (view === 'blocks') {
-    loadReusableBlocksList();
+    const grid = document.getElementById('blocksGrid');
+    if (grid) {
+      grid.setAttribute('hx-get', '/hx/apps/' + encodeURIComponent(appId) + '/blocks');
+      htmx.ajax('GET', grid.getAttribute('hx-get'), { target: '#blocksGrid', swap: 'outerHTML' });
+    }
   }
   if (view === 'subscription') {
-    loadBilling();
+    const container = document.getElementById('billingPlansContainer');
+    if (container) {
+      container.setAttribute('hx-get', '/hx/apps/' + encodeURIComponent(appId) + '/billing');
+      htmx.ajax('GET', container.getAttribute('hx-get'), { target: '#billingPlansContainer', swap: 'outerHTML' });
+    }
+  }
+  if (view === 'routing') {
+    const container = document.getElementById('routingContainer');
+    if (container) {
+      container.setAttribute('hx-get', '/hx/apps/' + encodeURIComponent(appId) + '/routing');
+      htmx.ajax('GET', container.getAttribute('hx-get'), { target: '#routingContainer', swap: 'innerHTML' });
+    }
+    // Use event delegation for save button (content loaded via HTMX)
+    document.addEventListener('click', function routingSaveHandler(e) {
+      if (e.target.id === 'saveRoutingBtn' || e.target.closest('#saveRoutingBtn')) {
+        e.preventDefault();
+        const scheme = document.getElementById('routingScheme')?.value || '';
+        const host = document.getElementById('routingHost')?.value || '';
+        const prefix = document.getElementById('routingPrefix')?.value || '/';
+        const routeInputs = document.querySelectorAll('.route-path-input');
+        const paramsInputs = document.querySelectorAll('.route-params-input');
+        const routes = [];
+        routeInputs.forEach((inp, i) => {
+          const pageId = inp.dataset.pageId;
+          const path = inp.value.trim();
+          const paramsStr = paramsInputs[i]?.value.trim() || '';
+          const params = paramsStr ? paramsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+          if (path) {
+            routes.push({ page_id: pageId, path, params });
+          }
+        });
+        const body = new URLSearchParams();
+        body.set('scheme', scheme);
+        body.set('host', host);
+        body.set('prefix', prefix);
+        body.set('routes_json', JSON.stringify(routes));
+        htmx.ajax('PUT', '/hx/apps/' + encodeURIComponent(appId) + '/routing', {
+          target: '#routingContainer',
+          swap: 'innerHTML',
+          values: Object.fromEntries(body)
+        });
+        document.removeEventListener('click', routingSaveHandler);
+      }
+    });
+  }
+  if (view === 'analytics') {
+    loadAnalytics();
   }
 }
 window.switchAppView = switchAppView;
@@ -237,31 +511,31 @@ let dBselectedBlockId = null;
 let dBblockIdCounter = 0;
 
 const dBdefaults = {
-  container: { label: 'Container', properties: {}, children: [] },
-  grid: { label: 'Grid', properties: { gridCols: 2 }, children: [] },
-  card: { label: 'Card', properties: {}, children: [] },
-  tabs: { label: 'Tabs', properties: { tabHeaders: 'Tab 1,Tab 2', activeTab: 0 }, children: [] },
-  heading: { label: 'Heading', properties: { value: 'Heading' } },
-  text: { label: 'Text', properties: { value: 'Text content' } },
-  divider: { label: 'Divider', properties: {} },
-  image: { label: 'Image', properties: { src: '' } },
-  video: { label: 'Video', properties: { src: '' } },
-  banner: { label: 'Banner', properties: { value: 'Big Sale', placeholder: 'Limited time' } },
-  icon: { label: 'Icon', properties: { iconName: 'Heart', iconSize: 24 } },
-  button: { label: 'Button', properties: { value: 'Click Me' }, actions: { onClick: { type: 'none' } } },
-  input: { label: 'Input', properties: { placeholder: 'Type...' }, actions: { onChange: { type: 'none' } } },
-  textarea: { label: 'Textarea', properties: { placeholder: 'Write...' }, actions: { onChange: { type: 'none' } } },
-  select: { label: 'Select', properties: { options: 'Option 1,Option 2' }, actions: { onChange: { type: 'none' } } },
+  container: { label: 'Container', properties: {}, children: [], schema: {} },
+  grid: { label: 'Grid', properties: { gridCols: 2 }, children: [], schema: { gridCols: { type: 'number', label: 'Columns' } } },
+  card: { label: 'Card', properties: {}, children: [], schema: {} },
+  tabs: { label: 'Tabs', properties: { tabHeaders: 'Tab 1,Tab 2', activeTab: 0 }, children: [], schema: { tabHeaders: { type: 'string', label: 'Tabs (comma sep)' }, activeTab: { type: 'number', label: 'Active Tab Index' } } },
+  heading: { label: 'Heading', properties: { value: 'Heading' }, schema: { value: { type: 'string', label: 'Text' } } },
+  text: { label: 'Text', properties: { value: 'Text content' }, schema: { value: { type: 'text', label: 'Content' } } },
+  divider: { label: 'Divider', properties: {}, schema: {} },
+  image: { label: 'Image', properties: { src: '' }, schema: { src: { type: 'image', label: 'Source URL' } } },
+  video: { label: 'Video', properties: { src: '' }, schema: { src: { type: 'video', label: 'Video URL' } } },
+  banner: { label: 'Banner', properties: { value: 'Big Sale', placeholder: 'Limited time' }, schema: { value: { type: 'string', label: 'Title' }, placeholder: { type: 'string', label: 'Subtitle' } } },
+  icon: { label: 'Icon', properties: { iconName: 'Heart', iconSize: 24 }, schema: { iconName: { type: 'string', label: 'Icon Name' }, iconSize: { type: 'number', label: 'Size (px)' } } },
+  button: { label: 'Button', properties: { value: 'Click Me' }, actions: { onClick: { type: 'none' } }, schema: { value: { type: 'string', label: 'Label' } } },
+  input: { label: 'Input', properties: { placeholder: 'Type...' }, actions: { onChange: { type: 'none' } }, schema: { placeholder: { type: 'string', label: 'Placeholder' } } },
+  textarea: { label: 'Textarea', properties: { placeholder: 'Write...' }, actions: { onChange: { type: 'none' } }, schema: { placeholder: { type: 'string', label: 'Placeholder' } } },
+  select: { label: 'Select', properties: { options: 'Option 1,Option 2' }, actions: { onChange: { type: 'none' } }, schema: { options: { type: 'string', label: 'Options (comma sep)' } } },
   checkbox: { label: 'Checkbox', properties: {} },
   switch: { label: 'Switch', properties: {} },
-  list: { label: 'List', properties: { dataSource: '' } },
-  table: { label: 'Table', properties: { dataSource: '', columns: 'Name,Value' } },
-  chart: { label: 'Chart', properties: { chartType: 'bar' } },
-  carousel: { label: 'Carousel', properties: { src: '' } },
-  map: { label: 'Map', properties: { mapLocation: 'New York' } },
-  shopify_grid: { label: 'Shopify Grid', properties: { collectionId: '', layout: 'grid' } },
-  woo_grid: { label: 'Woo Grid', properties: { categoryId: '', layout: 'grid' } },
-  cart_button: { label: 'Cart Button', properties: { iconSize: 24, badgeColor: '#ef4444' } },
+  list: { label: 'List', properties: { dataSource: '' }, schema: { dataSource: { type: 'string', label: 'Collection' } } },
+  table: { label: 'Table', properties: { dataSource: '', columns: 'Name,Value' }, schema: { dataSource: { type: 'string', label: 'Collection' }, columns: { type: 'string', label: 'Columns (comma sep)' } } },
+  chart: { label: 'Chart', properties: { chartType: 'bar' }, schema: { chartType: { type: 'select', label: 'Type', options: ['bar', 'line', 'pie'] } } },
+  carousel: { label: 'Carousel', properties: { src: '' }, children: [], schema: { src: { type: 'string', label: 'Image URLs (comma sep)' } } },
+  map: { label: 'Map', properties: { mapLocation: 'New York' }, schema: { mapLocation: { type: 'string', label: 'Location' } } },
+  shopify_grid: { label: 'Shopify Grid', properties: { collectionId: '', layout: 'grid' }, schema: { collectionId: { type: 'string', label: 'Collection ID' }, layout: { type: 'select', label: 'Layout', options: ['grid', 'list'] } } },
+  woo_grid: { label: 'Woo Grid', properties: { categoryId: '', layout: 'grid' }, schema: { categoryId: { type: 'string', label: 'Category ID' }, layout: { type: 'select', label: 'Layout', options: ['grid', 'list'] } } },
+  cart_button: { label: 'Cart Button', properties: { iconSize: 24, badgeColor: '#ef4444' }, schema: { iconSize: { type: 'number', label: 'Icon Size' }, badgeColor: { type: 'color', label: 'Badge Color' } } },
 };
 
 const dBcategories = [
@@ -381,6 +655,7 @@ function debouncedSaveBuilder() {
       cfg.project_config = pc;
       await api('PUT', '/apps/' + appId, cfg);
       appData = await api('GET', '/apps/' + appId);
+      sendPreviewUpdate();
       
       if (indicator) {
         indicator.innerHTML = '<span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span> Saved';
@@ -435,6 +710,48 @@ async function openDashboardBuilder() {
     dBswitchPropTab('props');
     dBclearConsole();
   }, 50);
+
+  connectPreviewWS(appId);
+
+  // First-time builder hint
+  if (!localStorage.getItem('apt_builder_seen')) {
+    setTimeout(() => {
+      toast('✨ Drag elements from the palette or click to add. Cmd+Z to undo.', '');
+      localStorage.setItem('apt_builder_seen', '1');
+    }, 800);
+  }
+
+  // Keyboard shortcuts for undo/redo (cmd+z / cmd+shift+z)
+  document.removeEventListener('keydown', dBkeyboardShortcut);
+  document.addEventListener('keydown', dBkeyboardShortcut);
+}
+
+function dBkeyboardShortcut(e) {
+  if (!e.metaKey && !e.ctrlKey) return;
+  const builderView = document.querySelector('.app-view[data-appview="builder"]');
+  if (!builderView || !builderView.classList.contains('active')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    dBUndo();
+  } else if (e.key === 'z' && e.shiftKey) {
+    e.preventDefault();
+    dBRedo();
+  }
+}
+window.dBkeyboardShortcut = dBkeyboardShortcut;
+
+function dBupdateUndoButtons() {
+  const undoBtn = document.querySelector('.dbuilder-action-btn[title="Undo"]');
+  const redoBtn = document.querySelector('.dbuilder-action-btn[title="Redo"]');
+  if (undoBtn) {
+    undoBtn.style.opacity = dBhistoryIndex > 0 ? '1' : '0.3';
+    undoBtn.style.pointerEvents = dBhistoryIndex > 0 ? 'auto' : 'none';
+  }
+  if (redoBtn) {
+    redoBtn.style.opacity = dBhistoryIndex < dBhistory.length - 1 ? '1' : '0.3';
+    redoBtn.style.pointerEvents = dBhistoryIndex < dBhistory.length - 1 ? 'auto' : 'none';
+  }
 }
 
 function renderDashboardBuilder() {
@@ -442,6 +759,7 @@ function renderDashboardBuilder() {
   renderDBuilderPalette();
   renderDBuilderCanvas();
   renderDBuilderProps();
+  dBupdateUndoButtons();
   
   if (dBleftSidebarTab === 'layers') {
     renderDBuilderLayersTree();
@@ -569,7 +887,18 @@ function renderDBuilderCanvas() {
   }
 
   if (!page.elements.length) { 
-    html += '<div class="dbuilder-empty" style="min-height:200px">Click blocks from the palette to add them</div>';
+    html += '<div class="dbuilder-empty" style="min-height:200px;padding:28px 20px;text-align:center;">' +
+      '<div style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">This page is empty</div>' +
+      '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5;margin-bottom:14px;">Click an element from the palette to add it,<br>or try a preset:</div>' +
+      '<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">' +
+      '<button class="btn btn-xs" onclick="dBaddBlock(\'preset_hero\')" style="border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:0.72rem;">Hero Section</button>' +
+      '<button class="btn btn-xs" onclick="dBaddBlock(\'preset_pricing\')" style="border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:0.72rem;">Pricing</button>' +
+      '<button class="btn btn-xs" onclick="dBaddBlock(\'preset_shop_banner\')" style="border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:0.72rem;">Shop Banner</button>' +
+      '<button class="btn btn-xs" onclick="dBaddBlock(\'preset_contact\')" style="border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:0.72rem;">Contact Form</button>' +
+      '</div>' +
+      '<div style="margin-top:14px;font-size:0.7rem;color:var(--text-muted);border-top:1px solid var(--border);padding-top:12px;">' +
+      'Tip: <kbd style="background:var(--bg-input);padding:1px 5px;border-radius:3px;font-size:0.68rem;">Cmd+Z</kbd> undo &bull; <kbd style="background:var(--bg-input);padding:1px 5px;border-radius:3px;font-size:0.68rem;">Cmd+Shift+Z</kbd> redo &bull; drag blocks from palette' +
+      '</div></div>';
   } else {
     html += page.elements.map((el, idx) => renderDBuilderBlock(el, idx, page.elements)).join('');
   }
@@ -582,13 +911,15 @@ function renderDBuilderBlock(el, idx, siblings) {
   const hasChildren = el.children && Array.isArray(el.children);
   const isContainer = hasChildren && ['container', 'grid', 'card', 'tabs'].includes(el.type);
   const icon = dBgetIcon(el.type) || '■';
+  const hiddenClass = el.hidden ? ' block-hidden' : '';
   
-  let html = '<div class="dbuilder-block' + (sel ? ' selected' : '') + '" onclick="event.stopPropagation(); dBselectBlock(\'' + el.id + '\', event)">' +
-    '<div class="dbuilder-block-type-badge">' + icon + ' ' + esc(el.type) + '</div>' +
+  let html = '<div class="dbuilder-block' + (sel ? ' selected' : '') + hiddenClass + '" data-block-id="' + esc(el.id) + '" onclick="event.stopPropagation(); dBselectBlock(\'' + el.id + '\', event)">' +
+    '<div class="dbuilder-block-type-badge">' + icon + ' ' + esc(el.type) + (el.hidden ? ' <span style="font-size:0.7em;opacity:0.7;margin-left:4px;">(Hidden)</span>' : '') + '</div>' +
     '<div class="dbuilder-block-toolbar">' +
     (idx > 0 ? '<button onclick="event.stopPropagation();dBmoveBlock(\'' + el.id + '\',-1)" title="Up">↑</button>' : '') +
     (idx < siblings.length - 1 ? '<button onclick="event.stopPropagation();dBmoveBlock(\'' + el.id + '\',1)" title="Down">↓</button>' : '') +
     '<button onclick="event.stopPropagation();dBduplicateBlock(\'' + el.id + '\')" title="Duplicate">⧉</button>' +
+    '<button onclick="event.stopPropagation();dBToggleBlockVisibility(\'' + el.id + '\')" title="Hide Block" style="display:flex;align-items:center;justify-content:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>' +
     '<button class="danger" onclick="event.stopPropagation();dBremoveBlock(\'' + el.id + '\')" title="Delete">✕</button>' +
     '</div>' +
     '<div class="dbuilder-block-content">' + dBrenderMini(el);
@@ -644,59 +975,43 @@ function renderDBuilderProps() {
     // ── CONFIG TAB ──
     html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Label</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(el.label) + '" onchange="dBupdateLabel(\'' + el.id + '\',this.value)"></div></div>';
     html += '<div class="dbuilder-section-title">Properties</div>';
-    switch (el.type) {
-      case 'heading': case 'text': html += dBpropInput(el.id, 'value', 'Text', props.value); break;
-      case 'button': html += dBpropInput(el.id, 'value', 'Label', props.value); break;
-      case 'image': 
-        html += dBpropInput(el.id, 'src', 'Source URL', props.src); 
-        html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
-          '<label class="dbuilder-prop-label">Or Upload Local File (Max 2MB)</label>' +
-          '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
-            '<input type="file" id="dbImageFilePicker" accept="image/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 2, false)" style="display:none;">' +
-            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbImageFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
-              'Upload Image' +
-            '</button>' +
-          '</div>' +
-        '</div>';
-        break;
-      case 'video': 
-        html += dBpropInput(el.id, 'src', 'Video URL', props.src);
-        html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
-          '<label class="dbuilder-prop-label">Or Upload Video (Max 10MB)</label>' +
-          '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
-            '<input type="file" id="dbVideoFilePicker" accept="video/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 10, false)" style="display:none;">' +
-            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbVideoFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>' +
-              'Upload Video' +
-            '</button>' +
-          '</div>' +
-        '</div>';
-        break;
-      case 'banner': html += dBpropInput(el.id, 'value', 'Title', props.value); html += dBpropInput(el.id, 'placeholder', 'Subtitle', props.placeholder); break;
-      case 'input': case 'textarea': html += dBpropInput(el.id, 'placeholder', 'Placeholder', props.placeholder); break;
-      case 'select': html += dBpropInput(el.id, 'options', 'Options (comma sep)', props.options); break;
-      case 'checkbox': case 'switch': html += dBpropInput(el.id, 'label', 'Label', el.label); break;
-      case 'icon': html += dBpropInput(el.id, 'iconName', 'Icon Name', props.iconName); html += dBpropInput(el.id, 'iconSize', 'Size (px)', props.iconSize); break;
-      case 'grid': html += dBpropInput(el.id, 'gridCols', 'Columns', props.gridCols); break;
-      case 'tabs': html += dBpropInput(el.id, 'tabHeaders', 'Tabs (comma sep)', props.tabHeaders); break;
-      case 'list': html += dBpropInput(el.id, 'dataSource', 'Collection', props.dataSource); break;
-      case 'table': html += dBpropInput(el.id, 'dataSource', 'Collection', props.dataSource); html += dBpropInput(el.id, 'columns', 'Columns (comma sep)', props.columns); break;
-      case 'chart': html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">Type</label><div class="dbuilder-prop-row"><select onchange="dBupdateProp(\'' + el.id + '\',\'chartType\',this.value)"><option value="bar"' + (props.chartType === 'bar' ? ' selected' : '') + '>Bar</option><option value="line"' + (props.chartType === 'line' ? ' selected' : '') + '>Line</option><option value="pie"' + (props.chartType === 'pie' ? ' selected' : '') + '>Pie</option></select></div></div>'; break;
-      case 'carousel': 
-        html += dBpropInput(el.id, 'src', 'Image URLs (comma sep)', props.src); 
-        html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
-          '<label class="dbuilder-prop-label">Or Add Local Image (Max 2MB)</label>' +
-          '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
-            '<input type="file" id="dbCarouselFilePicker" accept="image/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 2, true)" style="display:none;">' +
-            '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbCarouselFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
-              'Add to Carousel' +
-            '</button>' +
-          '</div>' +
-        '</div>';
-        break;
-      case 'map': html += dBpropInput(el.id, 'mapLocation', 'Location', props.mapLocation); break;
+    html += dBrenderSchemaFields(el.id, el.type, props);
+    // Special upload UI for media types
+    if (el.type === 'image') {
+      html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
+        '<label class="dbuilder-prop-label">Or Upload Local File (Max 2MB)</label>' +
+        '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
+          '<input type="file" id="dbImageFilePicker" accept="image/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 2, false)" style="display:none;">' +
+          '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbImageFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+            'Upload Image' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }
+    if (el.type === 'video') {
+      html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
+        '<label class="dbuilder-prop-label">Or Upload Video (Max 10MB)</label>' +
+        '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
+          '<input type="file" id="dbVideoFilePicker" accept="video/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 10, false)" style="display:none;">' +
+          '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbVideoFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>' +
+            'Upload Video' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }
+    if (el.type === 'carousel') {
+      html += '<div class="dbuilder-prop-group" style="margin-top:10px;">' +
+        '<label class="dbuilder-prop-label">Or Add Local Image (Max 2MB)</label>' +
+        '<div class="dbuilder-prop-row" style="display:flex; gap:8px; align-items:center;">' +
+          '<input type="file" id="dbCarouselFilePicker" accept="image/*" onchange="dBhandleMediaUpload(\'' + el.id + '\', this, 2, true)" style="display:none;">' +
+          '<button class="btn btn-sm btn-outline" onclick="document.getElementById(\'dbCarouselFilePicker\').click()" style="width:100%; justify-content:center; padding:8px 12px; font-size:0.8rem; display:flex; align-items:center; gap:6px;">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+            'Add to Carousel' +
+          '</button>' +
+        '</div>' +
+      '</div>';
     }
   } else if (dBactivePropTab === 'styles') {
     // ── DESIGN TAB ──
@@ -740,6 +1055,29 @@ function renderDBuilderProps() {
 
 function dBpropInput(elId, key, label, value) {
   return '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">' + label + '</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(value != null ? String(value) : '') + '" onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)"></div></div>';
+}
+
+function dBrenderSchemaFields(elId, elType, props) {
+  const def = dBdefaults[elType];
+  if (!def || !def.schema) return '';
+  let html = '';
+  for (const [key, field] of Object.entries(def.schema)) {
+    const value = props[key];
+    const label = field.label || key;
+    if (field.type === 'number') {
+      html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">' + label + '</label><div class="dbuilder-prop-row"><input type="number" value="' + esc(value != null ? String(value) : '') + '" onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)"></div></div>';
+    } else if (field.type === 'color') {
+      html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">' + label + '</label><div class="dbuilder-prop-row"><input type="color" value="' + esc(value || '#6366f1') + '" onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)"><input type="text" value="' + esc(value || '') + '" onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)" placeholder="#6366f1"></div></div>';
+    } else if (field.type === 'select') {
+      const opts = field.options || [];
+      html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">' + label + '</label><div class="dbuilder-prop-row"><select onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)">' + opts.map(o => '<option value="' + o + '"' + (String(value) === o ? ' selected' : '') + '>' + o + '</option>').join('') + '</select></div></div>';
+    } else if (field.type === 'text') {
+      html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">' + label + '</label><div class="dbuilder-prop-row"><textarea rows="3" onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)" style="width:100%;padding:8px 10px;font-size:0.8rem;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;resize:vertical;">' + esc(value || '') + '</textarea></div></div>';
+    } else {
+      html += '<div class="dbuilder-prop-group"><label class="dbuilder-prop-label">' + label + '</label><div class="dbuilder-prop-row"><input type="text" value="' + esc(value != null ? String(value) : '') + '" onchange="dBupdateProp(\'' + elId + '\',\'' + key + '\',this.value)"></div></div>';
+    }
+  }
+  return html;
 }
 
 function dBpropStyle(elId, key, label, value, type, options) {
@@ -1006,6 +1344,11 @@ function dBselectBlock(id, event) {
   renderDBuilderCanvas();
   renderDBuilderProps();
   
+  // Broadcast selection to collaborators
+  if (dBselectedBlockId) {
+    sendCollabSelect(dBselectedBlockId);
+  }
+  
   // Keep layers Navigator synced if active
   if (dBleftSidebarTab === 'layers') {
     renderDBuilderLayersTree();
@@ -1244,7 +1587,7 @@ function renderDBuilderLayersTree() {
   
   const page = dBpages.find(p => p.id === dBactivePageId);
   if (!page || !page.elements || page.elements.length === 0) {
-    container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); text-align:center; padding:20px;">No elements in this page yet</div>';
+    container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); text-align:center; padding:20px;">No elements yet — add blocks from the palette</div>';
     return;
   }
   
@@ -1254,13 +1597,16 @@ function renderDBuilderLayersTree() {
     let treeHtml = '';
     elements.forEach((el) => {
       const isSelected = el.id === dBselectedBlockId;
+      const isHidden = el.hidden === true;
       const indent = depth * 14;
       const icon = dBgetIcon(el.type) || '■';
+      const eyeIcon = isHidden ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
       
       treeHtml += `<div class="layers-tree-item" onclick="event.stopPropagation(); dBselectBlock('${el.id}')" style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; margin-bottom:2px; font-size:0.76rem; cursor:pointer; font-weight:500; margin-left:${indent}px; background:${isSelected ? 'rgba(99,102,241,0.1)' : 'transparent'}; border:1px solid ${isSelected ? 'rgba(99,102,241,0.25)' : 'transparent'}; transition:all 0.15s; color:${isSelected ? 'var(--primary)' : 'var(--text-secondary)'};">`;
-      treeHtml += `<span style="font-size:0.85rem; flex-shrink:0;">${icon}</span>`;
-      treeHtml += `<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(el.label || el.type)}</span>`;
-      treeHtml += `<button onclick="event.stopPropagation(); dBremoveBlock('${el.id}')" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:0.7rem; padding:2px; line-height:1; display:flex; align-items:center; opacity:0.6;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">✕</button>`;
+      treeHtml += `<span style="font-size:0.85rem; flex-shrink:0; opacity:${isHidden ? '0.4' : '1'};">${icon}</span>`;
+      treeHtml += `<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:${isHidden ? '0.4' : '1'}; text-decoration:${isHidden ? 'line-through' : 'none'};">${esc(el.label || el.type)}</span>`;
+      treeHtml += `<button onclick="event.stopPropagation(); dBToggleBlockVisibility('${el.id}')" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:0.7rem; padding:2px; line-height:1; display:flex; align-items:center; opacity:0.6; margin-right:4px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="${isHidden ? 'Show Block' : 'Hide Block'}">${eyeIcon}</button>`;
+      treeHtml += `<button onclick="event.stopPropagation(); dBremoveBlock('${el.id}')" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:0.7rem; padding:2px; line-height:1; display:flex; align-items:center; opacity:0.6;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="Delete Block">✕</button>`;
       treeHtml += '</div>';
       
       if (el.children && Array.isArray(el.children) && el.children.length > 0) {
@@ -1274,6 +1620,22 @@ function renderDBuilderLayersTree() {
   container.innerHTML = html;
 }
 window.renderDBuilderLayersTree = renderDBuilderLayersTree;
+
+function dBToggleBlockVisibility(id) {
+  const page = dBpages.find(p => p.id === dBactivePageId);
+  if (!page) return;
+  const found = dBfindInList(id, page.elements);
+  if (found) {
+    dBpushHistory();
+    found.item.hidden = !found.item.hidden;
+    debouncedSaveBuilder();
+    renderDBuilderCanvas();
+    if (dBleftSidebarTab === 'layers') {
+      renderDBuilderLayersTree();
+    }
+  }
+}
+window.dBToggleBlockVisibility = dBToggleBlockVisibility;
 
 function dBswitchPropTab(tab) {
   dBactivePropTab = tab;
@@ -1321,6 +1683,7 @@ function dBpushHistory() {
     window.dBhasUnpublishedChanges = true;
     updatePublishButtonUI();
   }
+  dBupdateUndoButtons();
 }
 window.dBpushHistory = dBpushHistory;
 
@@ -1334,6 +1697,7 @@ function dBUndo() {
     dBselectedBlockId = null;
     renderDashboardBuilder();
     renderDBuilderLayersTree();
+    dBupdateUndoButtons();
     dBconsoleLog("Undo: Reverted canvas configuration to previous state", "info");
   } else {
     toast("Nothing to Undo");
@@ -1351,6 +1715,7 @@ function dBRedo() {
     dBselectedBlockId = null;
     renderDashboardBuilder();
     renderDBuilderLayersTree();
+    dBupdateUndoButtons();
     dBconsoleLog("Redo: Re-applied configuration state", "info");
   } else {
     toast("Nothing to Redo");
@@ -1497,6 +1862,8 @@ window.dBupdateAction = dBupdateAction;
 window.dbuilderFilterPalette = dbuilderFilterPalette;
 
 async function publishBuilderUpdate() {
+  const btn = document.getElementById('btnPublishBuilder');
+  setLoading(btn, true);
   try {
     const cfg = (appData && appData.config) || {};
     const pc = cfg.project_config || {};
@@ -1505,13 +1872,16 @@ async function publishBuilderUpdate() {
     await api('PUT', '/apps/' + appId, cfg);
     appData = await api('GET', '/apps/' + appId);
     
-    // Now trigger the actual Expo EAS publish OTA
-    await triggerOtaUpdate();
+    // Trigger OTA publish
+    await api('POST', '/v1/apps/' + appId + '/publish', {});
     
     window.dBhasUnpublishedChanges = false;
     updatePublishButtonUI();
+    toast('Published!', 'success');
   } catch (err) {
     toast(err.message, 'error');
+  } finally {
+    setLoading(btn, false);
   }
 }
 window.publishBuilderUpdate = publishBuilderUpdate;
@@ -1719,10 +2089,13 @@ function removeMenuItem(idx) {
 window.removeMenuItem = removeMenuItem;
 
 async function saveAppMenu() {
+  const btn = document.getElementById('saveMenuBtn');
+  setLoading(btn, true);
   try {
     await api('PUT', '/v1/apps/' + appId + '/navigation', { type: menuType, config: menuItems });
     toast('Menu saved!');
   } catch (err) { toast(err.message, 'error'); }
+  finally { setLoading(btn, false); }
 }
 window.saveAppMenu = saveAppMenu;
 
@@ -1769,6 +2142,24 @@ function renderOverview() {
     '<div class="info-value' + (r.mono ? ' info-mono' : '') + '">' + esc(r.value) + '</div>' +
     '</div>'
   ).join('');
+
+  // Getting started guide when no pages
+  const guideEl = document.getElementById('gettingStartedGuide');
+  if (!guideEl) return;
+  if (pages.length === 0) {
+    guideEl.style.display = 'block';
+    guideEl.innerHTML =
+      '<div class="gs-card">' +
+      '<div class="gs-header"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 17l-5.5 4 2-7L3 9h7z"/></svg> Getting Started</div>' +
+      '<div class="gs-steps">' +
+      '<div class="gs-step"><div class="gs-step-num">1</div><div class="gs-step-body"><strong>Add pages</strong><span>Go to <a href="#" onclick="switchAppView(\'pages\');return false">Pages</a> to create your first page</span></div></div>' +
+      '<div class="gs-step"><div class="gs-step-num">2</div><div class="gs-step-body"><strong>Design with the Builder</strong><span>Open the <a href="#" onclick="switchAppView(\'builder\');return false">Builder</a> to drag blocks onto your pages</span></div></div>' +
+      '<div class="gs-step"><div class="gs-step-num">3</div><div class="gs-step-body"><strong>Set up navigation</strong><span>Configure tabs in the <a href="#" onclick="switchAppView(\'menu\');return false">Menu</a> section</span></div></div>' +
+      '<div class="gs-step"><div class="gs-step-num">4</div><div class="gs-step-body"><strong>Publish & build</strong><span>Hit <strong>Publish Live App</strong> then trigger a build in the <a href="#" onclick="switchAppView(\'builds\');return false">Builds</a> tab</span></div></div>' +
+      '</div></div>';
+  } else {
+    guideEl.style.display = 'none';
+  }
 }
 
 // ── Mini Preview ──
@@ -2076,7 +2467,9 @@ let cachedPages = [];
 
 async function loadPages() {
   const container = document.getElementById('appPagesList');
+  if (!container) return;
   try {
+    container.innerHTML = '<div class="loading"><span class="spinner"></span> Loading pages...</div>';
     const app = await api('GET', '/apps/' + appId);
     const pc = (app.config || {}).project_config || {};
     const pages = pc.pages || [];
@@ -2086,7 +2479,7 @@ async function loadPages() {
     document.getElementById('pageCount').textContent = '(' + pages.length + ')';
 
     if (!pages.length) {
-      container.innerHTML = '<div class="empty-state"><h3>No pages yet</h3><p>Add pages to your app to get started</p></div>';
+      container.innerHTML = '<div class="empty-state"><h3>No pages yet</h3><p>Create your first page to start building your app</p><button class="btn btn-sm btn-primary" onclick="showAddPageForm()">Create Page</button></div>';
       return;
     }
 
@@ -2174,7 +2567,7 @@ async function loadPages() {
         '</div>';
     }).join('');
   } catch (err) {
-    container.innerHTML = '<div class="empty-state"><p>Failed to load pages</p></div>';
+    showError(container, 'Failed to load pages: ' + err.message, 'loadPages');
   }
 }
 
@@ -2209,17 +2602,20 @@ async function createPage() {
   const name = input.value.trim();
   if (!name) { toast('Enter a page name', 'error'); return; }
 
-  const app = await api('GET', '/apps/' + appId);
-  const cfg = app.config || {};
-  const pc = cfg.project_config || {};
-  const pages = pc.pages || [];
-
-  const newId = 'page_' + Date.now();
-  pages.push({ id: newId, name, icon: '▤', elements: [] });
-  pc.pages = pages;
-  cfg.project_config = pc;
+  const btn = document.getElementById('createPageBtn');
+  setLoading(btn, true);
 
   try {
+    const app = await api('GET', '/apps/' + appId);
+    const cfg = app.config || {};
+    const pc = cfg.project_config || {};
+    const pages = pc.pages || [];
+
+    const newId = 'page_' + Date.now();
+    pages.push({ id: newId, name, icon: '▤', elements: [] });
+    pc.pages = pages;
+    cfg.project_config = pc;
+
     await api('PUT', '/apps/' + appId, cfg);
     toast('Page created!');
     hideAddPageForm();
@@ -2229,6 +2625,8 @@ async function createPage() {
     renderMiniPreview();
   } catch (err) {
     toast(err.message, 'error');
+  } finally {
+    setLoading(btn, false);
   }
 }
 window.createPage = createPage;
@@ -2454,7 +2852,7 @@ async function loadBuilds() {
         '</div></div>';
     }).join('') + '</div>';
   } catch (err) {
-    container.innerHTML = '<div class="build-empty"><strong>Failed to load builds</strong><span>' + esc(err.message) + '</span></div>';
+    showError(container, 'Failed to load builds: ' + err.message, 'loadBuilds');
   }
 }
 
@@ -2539,6 +2937,8 @@ window.triggerBuild = triggerBuild;
 // ── Publish ──
 
 async function publishConfig() {
+  const btn = document.getElementById('deployBtn');
+  setLoading(btn, true);
   try {
     const res = await api('POST', '/v1/apps/' + appId + '/publish', {});
     toast('Published version ' + res.version, 'success');
@@ -2546,6 +2946,8 @@ async function publishConfig() {
     loadQR();
   } catch (err) {
     toast(err.message, 'error');
+  } finally {
+    setLoading(btn, false);
   }
 }
 window.publishConfig = publishConfig;
@@ -2640,17 +3042,20 @@ async function loadConfigForm() {
 async function saveConfig() {
   const textarea = document.getElementById('appConfigJson');
   if (!textarea) return;
+  const btn = document.getElementById('saveConfigBtn');
+  setLoading(btn, true);
   try {
     const config = JSON.parse(textarea.value);
     await api('PUT', '/apps/' + appId, { config });
     toast('Config saved!');
-    // Reload app data
     appData = await api('GET', '/apps/' + appId);
     renderOverview();
     renderMiniPreview();
     loadPages();
   } catch (err) {
-    toast('Invalid JSON: ' + err.message, 'error');
+    toast((err instanceof SyntaxError ? 'Invalid JSON: ' : '') + err.message, 'error');
+  } finally {
+    setLoading(btn, false);
   }
 }
 window.saveConfig = saveConfig;
@@ -2675,6 +3080,8 @@ async function saveAppSettings() {
   if (!/^[a-zA-Z]/.test(appName)) { toast('App name must start with a letter', 'error'); return; }
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) { toast('Version must be semver (e.g. 1.0.0)', 'error'); return; }
 
+  const btn = document.getElementById('saveSettingsBtn');
+  setLoading(btn, true);
   try {
     const cfg = (appData && appData.config) || {};
     cfg.app_name = appName;
@@ -2696,11 +3103,97 @@ async function saveAppSettings() {
     renderOverview();
   } catch (err) {
     toast(err.message, 'error');
+  } finally {
+    setLoading(btn, false);
   }
 }
 window.saveAppSettings = saveAppSettings;
 
-// ── Delete ──
+// ── Profile ──
+
+async function loadProfile() {
+  const nameEl = document.getElementById('profileName');
+  const emailEl = document.getElementById('profileEmail');
+  if (!nameEl || !emailEl) return;
+  // Pre-fill from cached login data instantly, then refresh from server
+  const cached = localStorage.getItem('apt_user');
+  if (cached) {
+    try {
+      const u = JSON.parse(cached);
+      nameEl.value = u.name || '';
+      emailEl.value = u.email || '';
+    } catch (e) {}
+  }
+  try {
+    const user = await api('GET', '/auth/me');
+    nameEl.value = user.name || '';
+    emailEl.value = user.email || '';
+    localStorage.setItem('apt_user', JSON.stringify(user));
+  } catch (err) {
+    toast('Failed to load profile: ' + err.message, 'error');
+  }
+}
+
+window.loadProfile = loadProfile;
+
+async function saveProfile() {
+  const btn = document.getElementById('saveProfileBtn');
+  const name = document.getElementById('profileName').value.trim();
+  const email = document.getElementById('profileEmail').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  setLoading(btn, true);
+  try {
+    const res = await api('PUT', '/auth/profile', { name, email: email || undefined });
+    localStorage.setItem('apt_token', res.token);
+    localStorage.setItem('apt_user', JSON.stringify(res.user || { name, email }));
+    toast('Profile saved!', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+window.saveProfile = saveProfile;
+
+async function changePassword() {
+  const current = document.getElementById('pwCurrent').value;
+  const newPw = document.getElementById('pwNew').value;
+  if (!current) { toast('Enter current password', 'error'); return; }
+  if (newPw.length < 6) { toast('New password must be at least 6 characters', 'error'); return; }
+  const btn = document.getElementById('changePwBtn');
+  setLoading(btn, true);
+  try {
+    await api('PUT', '/auth/password', { current_password: current, new_password: newPw });
+    toast('Password changed!', 'success');
+    document.getElementById('pwCurrent').value = '';
+    document.getElementById('pwNew').value = '';
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+window.changePassword = changePassword;
+
+async function deleteAccount() {
+  const ok = await customConfirm('Delete Account', 'Permanently delete your account and all data? This cannot be undone.');
+  if (!ok) return;
+  try {
+    await api('DELETE', '/auth/account');
+    localStorage.removeItem('apt_token');
+    localStorage.removeItem('apt_user');
+    toast('Account deleted');
+    setTimeout(() => window.location.href = '/', 1200);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+window.deleteAccount = deleteAccount;
+
+// ── Delete App ──
 
 async function deleteApp() {
   const ok = await customConfirm('Delete App', 'Delete this app and all its data? This cannot be undone.');
@@ -2708,7 +3201,7 @@ async function deleteApp() {
   try {
     await api('DELETE', '/apps/' + appId);
     toast('App deleted');
-    setTimeout(() => window.location.href = '/', 1200);
+    setTimeout(() => window.location.href = '/app', 1200);
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -2718,40 +3211,6 @@ window.deleteApp = deleteApp;
 // ── Start ──
 
 document.addEventListener('DOMContentLoaded', init);
-async function savePageAppSettings() {
-  const appName = document.getElementById('pageEditAppName').value.trim();
-  const displayName = document.getElementById('pageEditDisplayName').value.trim();
-  const packageName = document.getElementById('pageEditPackageName').value.trim();
-  const version = document.getElementById('pageEditVersion').value.trim();
-
-  if (!appName) { toast('App name is required', 'error'); return; }
-  if (!/^[a-zA-Z]/.test(appName)) { toast('App name must start with a letter', 'error'); return; }
-  if (!version || !/^\d+\.\d+\.\d+$/.test(version)) { toast('Version must be semver (e.g. 1.0.0)', 'error'); return; }
-
-  try {
-    const cfg = (appData && appData.config) || {};
-    cfg.app_name = appName;
-    cfg.display_name = displayName;
-    cfg.package_name = packageName;
-    cfg.version = version;
-    await api('PUT', '/apps/' + appId, cfg);
-    toast('Settings saved!');
-    appData = await api('GET', '/apps/' + appId);
-    // Update header
-    const name = cfg.display_name || cfg.app_name || 'App';
-    document.getElementById('dashTitle').textContent = name;
-    document.getElementById('dashVersion').textContent = 'v' + version;
-    document.getElementById('dashAvatar').textContent = name.charAt(0).toUpperCase();
-    document.getElementById('dashName').textContent = name;
-    document.getElementById('dashSlug').textContent = appName;
-    document.title = name + ' — App Dashboard';
-    renderOverview();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}
-window.savePageAppSettings = savePageAppSettings;
-
 // We also need a function to load these when switching to the settings tab
 function loadPageAppSettings() {
   const cfg = (appData && appData.config) || {};
@@ -2824,117 +3283,6 @@ function loadThemeSettings() {
 }
 window.loadThemeSettings = loadThemeSettings;
 
-async function saveThemeSettings() {
-  const color = document.getElementById('themePrimaryColor').value;
-  const font = document.getElementById('themeFontFamily').value;
-  const radius = parseInt(document.getElementById('themeBorderRadius').value, 10);
-  
-  try {
-    const cfg = (appData && appData.config) || {};
-    const pc = cfg.project_config || {};
-    const theme = pc.theme || {};
-    
-    theme.primaryColor = color;
-    theme.fontFamily = font;
-    theme.borderRadius = radius;
-    
-    pc.theme = theme;
-    cfg.project_config = pc;
-    
-    await api('PUT', '/apps/' + appId, cfg);
-    toast('Theme settings saved!');
-    appData = await api('GET', '/apps/' + appId);
-    renderOverview();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}
-window.saveThemeSettings = saveThemeSettings;
-async function loadLanguages() {
-  const cfg = (appData && appData.config) || {};
-  const pc = cfg.project_config || {};
-  const locales = pc.locales || [{ code: 'en', name: 'English (Default)', progress: 100 }];
-  
-  const tbody = document.getElementById('languagesTableBody');
-  if (!tbody) return;
-  
-  tbody.innerHTML = locales.map((loc, idx) => `
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:20px 24px;font-weight:600;display:flex;align-items:center;gap:12px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:var(--bg-input);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;">${loc.code.toUpperCase()}</div>
-        ${esc(loc.name)}
-      </td>
-      <td style="padding:20px 24px;color:var(--text-secondary);font-family:monospace;font-size:0.9rem;">${esc(loc.code)}</td>
-      <td style="padding:20px 24px;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;box-shadow:inset 0 1px 2px var(--bg-input);">
-            <div style="height:100%;width:${loc.progress || 0}%;background:var(--primary);border-radius:4px;"></div>
-          </div>
-          <span style="font-size:0.85rem;font-weight:600;color:var(--primary);width:40px;">${loc.progress || 0}%</span>
-        </div>
-      </td>
-      <td style="padding:20px 24px;text-align:right;">
-        <button class="btn" style="padding:8px 16px;font-size:0.85rem;border-radius:8px;background:var(--bg-hover);border:1px solid var(--border);color:var(--text);" onclick="editLanguage(${idx})">Edit</button>
-      </td>
-    </tr>
-  `).join('');
-}
-window.loadLanguages = loadLanguages;
-
-async function addLanguage() {
-  const code = prompt('Enter language code (e.g. fr, es, de):');
-  if (!code) return;
-  const name = prompt('Enter language name (e.g. French, Spanish):');
-  if (!name) return;
-  
-  try {
-    const cfg = (appData && appData.config) || {};
-    const pc = cfg.project_config || {};
-    const locales = pc.locales || [{ code: 'en', name: 'English (Default)', progress: 100 }];
-    
-    locales.push({ code: code.toLowerCase(), name, progress: 0 });
-    pc.locales = locales;
-    cfg.project_config = pc;
-    
-    await api('PUT', '/apps/' + appId, cfg);
-    toast('Language added!');
-    appData = await api('GET', '/apps/' + appId);
-    loadLanguages();
-  } catch(err) {
-    toast(err.message, 'error');
-  }
-}
-window.addLanguage = addLanguage;
-
-async function editLanguage(idx) {
-  const cfg = (appData && appData.config) || {};
-  const pc = cfg.project_config || {};
-  const locales = pc.locales || [];
-  if (!locales[idx]) return;
-  
-  const progStr = prompt('Enter translation progress (0-100):', locales[idx].progress || 0);
-  if (progStr === null) return;
-  
-  let p = parseInt(progStr, 10);
-  if (isNaN(p)) p = 0;
-  if (p < 0) p = 0;
-  if (p > 100) p = 100;
-  
-  try {
-    locales[idx].progress = p;
-    pc.locales = locales;
-    cfg.project_config = pc;
-    
-    await api('PUT', '/apps/' + appId, cfg);
-    toast('Language updated!');
-    appData = await api('GET', '/apps/' + appId);
-    loadLanguages();
-  } catch(err) {
-    toast(err.message, 'error');
-  }
-}
-window.editLanguage = editLanguage;
-
 // ── Store Uploads ──
 async function loadStoreCredentials() {
   const cfg = (appData && appData.config) || {};
@@ -2949,22 +3297,26 @@ async function loadStoreCredentials() {
 }
 
 async function saveStoreCredentials() {
-  const issuerId = document.getElementById('storeIosIssuerId')?.value.trim();
-  const keyId = document.getElementById('storeIosKeyId')?.value.trim();
-  
-  const cfg = (appData && appData.config) || {};
-  if (!cfg.project_config) cfg.project_config = {};
-  if (!cfg.project_config.store_credentials) cfg.project_config.store_credentials = {};
-  
-  cfg.project_config.store_credentials.ios_issuer_id = issuerId;
-  cfg.project_config.store_credentials.ios_key_id = keyId;
-  
+  const btn = document.getElementById('saveStoreCredsBtn');
+  setLoading(btn, true);
   try {
+    const issuerId = document.getElementById('storeIosIssuerId')?.value.trim();
+    const keyId = document.getElementById('storeIosKeyId')?.value.trim();
+    
+    const cfg = (appData && appData.config) || {};
+    if (!cfg.project_config) cfg.project_config = {};
+    if (!cfg.project_config.store_credentials) cfg.project_config.store_credentials = {};
+    
+    cfg.project_config.store_credentials.ios_issuer_id = issuerId;
+    cfg.project_config.store_credentials.ios_key_id = keyId;
+    
     await api('PUT', '/apps/' + appId, cfg);
     toast('Store credentials saved!', 'success');
     appData = await api('GET', '/apps/' + appId);
   } catch (err) {
     toast('Error saving store credentials', 'error');
+  } finally {
+    setLoading(btn, false);
   }
 }
 
@@ -3043,103 +3395,305 @@ window.loadStoreCredentials = loadStoreCredentials;
 window.saveStoreCredentials = saveStoreCredentials;
 window.triggerStoreSubmit = triggerStoreSubmit;
 
-// ── OTA Updates ──
-async function triggerOtaUpdate() {
-  toast('Publishing OTA Update...', 'info');
+
+
+// ── Third-Party SDK Registry ──
+const THIRD_PARTY_SDKS = [
+  { key:'gokwik', name:'GoKwik', category:'Payments', color:'#6366f1', icon:'checkout',
+    description:'AI-powered checkout with higher conversion and reduced RTO.',
+    longDescription:'GoKwik uses AI to optimize your checkout flow with auto-fill, smart validation, and RTO reduction. Boost conversions and reduce failed deliveries.',
+    npmPackage:'gokwik-react-native-sdk',
+    configFields:[
+      { key:'api_key', label:'API Key', type:'secret', placeholder:'gw_...', required:true },
+      { key:'merchant_id', label:'Merchant ID', type:'text', placeholder:'MID...', required:true }
+    ]},
+  { key:'razorpay', name:'Razorpay', category:'Payments', color:'#3399ff', icon:'payment',
+    description:'Full-stack payment gateway for India — UPI, cards, net banking, wallets.',
+    longDescription:'Accept credit/debit cards, UPI, Net Banking, Pay Later, and EMI options with a seamless integration.',
+    npmPackage:'razorpay-react-native',
+    configFields:[
+      { key:'key_id', label:'Key ID', type:'text', placeholder:'rzp_live_...', required:true },
+      { key:'key_secret', label:'Key Secret', type:'secret', placeholder:'...', required:true }
+    ]},
+  { key:'cashfree', name:'Cashfree', category:'Payments', color:'#14a37f', icon:'payment',
+    description:'India\'s leading payment gateway with 100+ payment modes.',
+    longDescription:'Accept payments via credit/debit cards, UPI, Net Banking, Pay Later. Features instant settlements and auto-reconciliation.',
+    npmPackage:'cashfree-pg-react-native-sdk',
+    configFields:[
+      { key:'app_id', label:'App ID', type:'text', placeholder:'CF...', required:true },
+      { key:'secret_key', label:'Secret Key', type:'secret', placeholder:'...', required:true }
+    ]},
+  { key:'stripe', name:'Stripe', category:'Payments', color:'#635bff', icon:'payment',
+    description:'Global payments for 135+ currencies — cards, Apple Pay, Google Pay.',
+    longDescription:'World\'s most popular payment processor. Accept payments from customers worldwide via cards, Apple Pay, Google Pay, and BNPL.',
+    npmPackage:'@stripe/stripe-react-native',
+    configFields:[
+      { key:'publishable_key', label:'Publishable Key', type:'text', placeholder:'pk_live_...', required:true },
+      { key:'secret_key', label:'Secret Key', type:'secret', placeholder:'sk_live_...', required:true }
+    ]},
+  { key:'return_prime', name:'Return Prime', category:'Logistics', color:'#f97316', icon:'returns',
+    description:'End-to-end return management and reverse logistics for e-commerce.',
+    longDescription:'Automate return requests, pickup, quality check, and refunds. Reduce return TAT and improve customer satisfaction.',
+    npmPackage:'return-prime-react-native-sdk',
+    configFields:[
+      { key:'api_key', label:'API Key', type:'secret', placeholder:'rp_...', required:true },
+      { key:'merchant_id', label:'Merchant ID', type:'text', placeholder:'MID...', required:true }
+    ]},
+  { key:'shiprocket', name:'Shiprocket', category:'Logistics', color:'#0f6cbf', icon:'shipping',
+    description:'Automated shipping with 17+ courier partners and real-time tracking.',
+    longDescription:'Connect to 17+ courier partners — Delhivery, Blue Dart, FedEx. Automate labels, schedule pickups, track shipments in real-time.',
+    npmPackage:'shiprocket-react-native-sdk',
+    configFields:[
+      { key:'api_key', label:'API Key', type:'secret', placeholder:'...', required:true },
+      { key:'email', label:'Email', type:'text', placeholder:'your@email.com', required:true }
+    ]},
+  { key:'delhivery', name:'Delhivery', category:'Logistics', color:'#e22b22', icon:'shipping',
+    description:'India\'s largest logistics network with COD reconciliation.',
+    longDescription:'End-to-end logistics and supply chain solutions across India with real-time tracking and COD reconciliation.',
+    npmPackage:'delhivery-react-native-sdk',
+    configFields:[
+      { key:'api_token', label:'API Token', type:'secret', placeholder:'...', required:true },
+      { key:'client_id', label:'Client ID', type:'text', placeholder:'...', required:true }
+    ]},
+  { key:'mixpanel', name:'Mixpanel', category:'Analytics', color:'#7856ff', icon:'analytics',
+    description:'Product analytics — funnels, retention, user behavior tracking.',
+    longDescription:'Track events, analyze funnels, measure retention, and run A/B tests to optimize the user experience.',
+    npmPackage:'mixpanel-react-native',
+    configFields:[
+      { key:'project_token', label:'Project Token', type:'text', placeholder:'...', required:true }
+    ]},
+  { key:'clevertap', name:'CleverTap', category:'Analytics', color:'#ff6b35', icon:'analytics',
+    description:'Engagement platform with push, in-app, and personalization.',
+    longDescription:'Combine analytics with multi-channel engagement — push notifications, in-app messages, email, and webhooks.',
+    npmPackage:'clevertap-react-native',
+    configFields:[
+      { key:'account_id', label:'Account ID', type:'text', placeholder:'WZ...', required:true },
+      { key:'account_token', label:'Account Token', type:'secret', placeholder:'...', required:true }
+    ]},
+  { key:'firebase_analytics', name:'Firebase', category:'Analytics', color:'#ffca28', icon:'analytics',
+    description:'Free analytics, crash reporting, push notifications (FCM).',
+    longDescription:'Google\'s free app analytics with unlimited events, Crashlytics, FCM push notifications, and performance monitoring in one SDK.',
+    npmPackage:'@react-native-firebase/analytics',
+    configFields:[
+      { key:'google_app_id', label:'Google App ID', type:'text', placeholder:'1:...', required:true },
+      { key:'api_key', label:'API Key', type:'secret', placeholder:'AIzaSy...', required:true }
+    ]},
+  { key:'intercom', name:'Intercom', category:'Support', color:'#6afdef', icon:'support',
+    description:'In-app chat, bots, and proactive customer messaging.',
+    longDescription:'Chat with customers in real-time, send targeted messages, automate support with bots. Drive engagement and reduce support tickets.',
+    npmPackage:'intercom-react-native',
+    configFields:[
+      { key:'app_id', label:'App ID', type:'text', placeholder:'...', required:true },
+      { key:'ios_api_key', label:'iOS API Key', type:'secret', placeholder:'ios_sdk-...', required:true },
+      { key:'android_api_key', label:'Android API Key', type:'secret', placeholder:'android_sdk-...', required:true }
+    ]},
+];
+
+const SDK_ICONS = {
+  checkout:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  payment:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+  returns:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2-12"/></svg>`,
+  shipping:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`,
+  analytics:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+  support:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+};
+
+let dtpIntegrations = {};
+
+async function dtpLoadIntegrations() {
   try {
-    const res = await api('POST', '/v1/apps/' + appId + '/publish', {});
-    toast('OTA Update Published successfully! v' + res.version, 'success');
-    loadOtaUpdates();
-    loadPublished();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+    const r = await fetch(API + '/apps/' + appId + '/settings', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) return;
+    const settings = await r.json();
+    const integ = settings.find(s => s.key === 'third_party_integrations');
+    dtpIntegrations = integ ? (integ.value || {}) : {};
+  } catch (_) { dtpIntegrations = {}; }
 }
 
-async function loadOtaUpdates() {
-  const container = document.getElementById('otaUpdatesList');
-  if (!container) return;
+async function dtpSaveIntegrations() {
   try {
-    const versions = await api('GET', '/v1/apps/' + appId + '/publish');
-    if (!versions || !versions.length) {
-      container.innerHTML = `
-        <div class="empty-state" style="padding:40px;text-align:center;color:var(--text-muted);">
-          No OTA updates pushed yet.
-        </div>`;
-      return;
-    }
-    container.innerHTML = versions.map(v => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);">
-        <div>
-          <div style="font-weight:600;font-size:0.95rem;color:var(--text);">Update v${esc(v.version)}</div>
-          <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:4px;">
-            Published ${formatDateTime(v.published_at)} &bull; Active on 100% of devices
-          </div>
-        </div>
-        ${v.is_current ? `
-          <div style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-size:0.75rem;font-weight:600;border:1px solid rgba(16,185,129,0.2);">Active</div>
-        ` : `
-          <div style="padding:4px 10px;border-radius:6px;background:var(--bg-hover);color:var(--text-secondary);font-size:0.75rem;font-weight:500;border:1px solid var(--border);">Inactive</div>
-        `}
-      </div>
-    `).join('');
-  } catch (err) {
-    container.innerHTML = `<div class="empty-state" style="padding:40px;text-align:center;color:var(--danger);">Failed to load updates.</div>`;
-  }
-}
-
-// ── Integrations ──
-function loadIntegrations() {
-  const cfg = (appData && appData.config) || {};
-  const pc = cfg.project_config || {};
-  const integrations = pc.integrations || {};
-  const shopify = integrations.shopify || {};
-  const woo = integrations.woocommerce || {};
-
-  document.getElementById('integShopifyDomain').value = shopify.domain || '';
-  document.getElementById('integShopifyToken').value = shopify.storefront_token || '';
-
-  document.getElementById('integWooUrl').value = woo.store_url || '';
-  document.getElementById('integWooKey').value = woo.consumer_key || '';
-  document.getElementById('integWooSecret').value = woo.consumer_secret || '';
-}
-
-async function saveIntegrations() {
-  const cfg = (appData && appData.config) || {};
-  const pc = cfg.project_config || {};
-  const integrations = pc.integrations || {};
-
-  integrations.shopify = {
-    domain: document.getElementById('integShopifyDomain').value,
-    storefront_token: document.getElementById('integShopifyToken').value
-  };
-
-  integrations.woocommerce = {
-    store_url: document.getElementById('integWooUrl').value,
-    consumer_key: document.getElementById('integWooKey').value,
-    consumer_secret: document.getElementById('integWooSecret').value
-  };
-
-  pc.integrations = integrations;
-  cfg.project_config = pc;
-  
-  try {
-    const r = await fetch(API + '/apps/' + appId + '/config', {
+    const r = await fetch(API + '/apps/' + appId + '/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify(cfg)
+      body: JSON.stringify({ key: 'third_party_integrations', value: dtpIntegrations })
     });
     if (!r.ok) throw new Error('Failed to save');
-    toast('Integrations saved successfully.', 'success');
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+    toast('SDK configurations saved.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
 }
 
-window.loadIntegrations = loadIntegrations;
-window.saveIntegrations = saveIntegrations;
-window.triggerOtaUpdate = triggerOtaUpdate;
-window.loadOtaUpdates = loadOtaUpdates;
+function renderIntegrationsMarketplace() {
+  const container = document.getElementById('sdkMarketplaceGrid');
+  if (!container) return;
+  const enabled = Object.values(dtpIntegrations).filter(i => i.enabled).length;
+  document.getElementById('sdkEnabledCount').textContent = `${enabled} SDK${enabled!==1?'s':''} active`;
+  const q = (document.getElementById('sdkSearchInput')?.value || '').toLowerCase().trim();
+  const catFilter = document.getElementById('sdkCategoryFilter')?.value || 'all';
+  let filtered = THIRD_PARTY_SDKS;
+  if (q) filtered = filtered.filter(s => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+  if (catFilter !== 'all') filtered = filtered.filter(s => s.category === catFilter);
+  const cats = (catFilter !== 'all') ? [catFilter] : [...new Set(THIRD_PARTY_SDKS.map(s => s.category))];
+  let html = '';
+  if (!filtered.length) {
+    html = `<div style="padding:48px;text-align:center;color:var(--text-muted);font-size:0.9rem;">No SDKs match your search.</div>`;
+  } else {
+    for (const cat of cats) {
+      const sdks = filtered.filter(s => s.category === cat);
+      if (!sdks.length) continue;
+      html += `<div class="sdk-category"><div class="sdk-category-title">${cat}</div><div class="sdk-category-grid">`;
+      for (const s of sdks) {
+        const integ = dtpIntegrations[s.key];
+        const en = integ && integ.enabled;
+        html += `<div class="sdk-card" onclick="dtpOpenConfig('${s.key}')" style="${en?'border-color:'+s.color+';box-shadow:0 0 0 1px '+s.color+'40':''}">
+          <div class="sdk-card-top">
+            <div class="sdk-icon" style="background:${s.color}15;color:${s.color}">${SDK_ICONS[s.icon]||''}</div>
+            <div class="sdk-status ${en?'enabled':''}">${en?'Active':'Off'}</div>
+          </div>
+          <div class="sdk-name">${s.name}</div>
+          <div class="sdk-desc">${s.description}</div>
+          <div class="sdk-card-footer">
+            <span class="sdk-cat-tag">${s.category}</span>
+            ${en?'<span class="sdk-enabled-dot"></span>':''}
+          </div>
+        </div>`;
+      }
+      html += `</div></div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+window.renderIntegrationsMarketplace = renderIntegrationsMarketplace;
+
+function dtpOpenConfig(key) {
+  const sdk = THIRD_PARTY_SDKS.find(s => s.key === key);
+  if (!sdk) return;
+  const modal = document.getElementById('sdkConfigModal');
+  const integ = dtpIntegrations[key] || { enabled: false, config: {} };
+  let fields = '';
+  for (const f of sdk.configFields) {
+    const val = (integ.config&&integ.config[f.key])||'';
+    fields += `<div class="sdk-field-row">
+      <label class="sdk-field-label">${f.label}${f.required?' <span style="color:var(--danger)">*</span>':''}</label>
+      <input type="${f.type==='secret'?'password':'text'}" class="sdk-field-input" id="sdkField_${f.key}" value="${val.replace(/"/g,'&quot;')}" placeholder="${f.placeholder}">
+    </div>`;
+  }
+  modal.innerHTML = `<div class="sdk-modal-overlay" onclick="if(event.target===this)dtpCloseConfig()">
+    <div class="sdk-modal-panel">
+      <button class="sdk-modal-close" onclick="dtpCloseConfig()">✕</button>
+      <div class="sdk-modal-header">
+        <div class="sdk-modal-icon" style="background:${sdk.color}15;color:${sdk.color}">${SDK_ICONS[sdk.icon]||''}</div>
+        <div><div class="sdk-modal-name">${sdk.name}</div><div class="sdk-modal-cat">${sdk.category}</div></div>
+        <div class="sdk-toggle-wrap">
+          <label class="sdk-toggle"><input type="checkbox" id="sdkEnabledToggle" ${integ.enabled?'checked':''}><span class="sdk-toggle-slider"></span></label>
+          <span class="sdk-toggle-label" id="sdkToggleLabel">${integ.enabled?'Enabled':'Disabled'}</span>
+        </div>
+      </div>
+      <div class="sdk-modal-desc">${sdk.longDescription}</div>
+      <div class="sdk-modal-fields" data-key="${key}">${fields}</div>
+      <div class="sdk-modal-actions">
+        <button class="btn btn-sm btn-ghost" onclick="dtpCloseConfig()">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="dtpSaveConfig()">Save Configuration</button>
+      </div>
+    </div>
+  </div>`;
+  modal.style.display = 'block';
+  document.getElementById('sdkEnabledToggle').addEventListener('change', function() {
+    document.getElementById('sdkToggleLabel').textContent = this.checked ? 'Enabled' : 'Disabled';
+  });
+}
+
+function dtpCloseConfig() { document.getElementById('sdkConfigModal').style.display = 'none'; }
+
+async function dtpSaveConfig() {
+  const fieldsDiv = document.querySelector('.sdk-modal-fields');
+  if (!fieldsDiv) return;
+  const key = fieldsDiv.dataset.key;
+  const sdk = THIRD_PARTY_SDKS.find(s => s.key === key);
+  if (!sdk) return;
+  const enabled = document.getElementById('sdkEnabledToggle').checked;
+  const config = {};
+  for (const f of sdk.configFields) {
+    const val = document.getElementById('sdkField_'+f.key).value.trim();
+    if (f.required && !val) { toast(f.label+' is required.', 'error'); return; }
+    config[f.key] = val;
+  }
+  dtpIntegrations[key] = { enabled, config };
+  await dtpSaveIntegrations();
+  dtpCloseConfig();
+  renderIntegrationsMarketplace();
+}
+
+window.loadIntegrations = async function() {
+  // Load commerce integrations from app config
+  try {
+    const r = await fetch(API + '/apps/' + appId, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (r.ok) {
+      const app = await r.json();
+      const pc = (app.config && app.config.project_config) || {};
+      const integs = pc.integrations || {};
+      const shopify = integs.shopify || {};
+      const woo = integs.woocommerce || {};
+      document.getElementById('integShopifyDomain').value = shopify.domain || '';
+      document.getElementById('integShopifyToken').value = shopify.storefront_token || '';
+      document.getElementById('integWooUrl').value = woo.store_url || '';
+      document.getElementById('integWooKey').value = woo.consumer_key || '';
+      document.getElementById('integWooSecret').value = woo.consumer_secret || '';
+    }
+  } catch (_) {}
+  // Load third-party SDK integrations
+  await dtpLoadIntegrations();
+  renderIntegrationsMarketplace();
+  // Bind search/filter events
+  const sdkSearchEl = document.getElementById('sdkSearchInput');
+  const sdkFilterEl = document.getElementById('sdkCategoryFilter');
+  if (sdkSearchEl) sdkSearchEl.addEventListener('input', renderIntegrationsMarketplace);
+  if (sdkFilterEl) sdkFilterEl.addEventListener('change', renderIntegrationsMarketplace);
+};
+
+window.saveIntegrations = async function() {
+  const btn = document.getElementById('saveIntegrationsBtn');
+  setLoading(btn, true);
+  try {
+    const r1 = await fetch(API + '/apps/' + appId, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    if (r1.ok) {
+      const app = await r1.json();
+      const cfg = app.config || {};
+      const pc = cfg.project_config || {};
+      const integs = pc.integrations || {};
+      integs.shopify = {
+        domain: document.getElementById('integShopifyDomain').value,
+        storefront_token: document.getElementById('integShopifyToken').value
+      };
+      integs.woocommerce = {
+        store_url: document.getElementById('integWooUrl').value,
+        consumer_key: document.getElementById('integWooKey').value,
+        consumer_secret: document.getElementById('integWooSecret').value
+      };
+      pc.integrations = integs;
+      cfg.project_config = pc;
+      const r2 = await fetch(API + '/apps/' + appId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+        body: JSON.stringify(cfg)
+      });
+      if (!r2.ok) throw new Error('Failed to save store config');
+    }
+    await dtpSaveIntegrations();
+    toast('All integrations saved.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+  finally { setLoading(btn, false); }
+};
+window.dtpOpenConfig = dtpOpenConfig;
+window.dtpCloseConfig = dtpCloseConfig;
+window.dtpSaveConfig = dtpSaveConfig;
 
 // ── Reusable Blocks & Templates ──
 
@@ -3214,149 +3768,7 @@ function dBaddReusableBlock(templateId) {
   toast('Inserted reusable template: ' + template.name, 'success');
 }
 
-async function loadReusableBlocksList() {
-  const container = document.querySelector('[data-appview="blocks"] .overview-grid');
-  if (!container) return;
-  
-  try {
-    const res = await api('GET', '/v1/apps/' + appId + '/settings');
-    const setting = res.find(s => s.key === 'reusable_blocks');
-    const reusableBlocks = setting ? (setting.value || []) : [];
-    
-    let html = '';
-    
-    if (reusableBlocks.length > 0) {
-      html += reusableBlocks.map(b => `
-        <div class="section-card" style="margin:0;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;">
-          <div style="height:120px;background:var(--bg-hover);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:2.5rem;">
-            ${esc(dBgetIcon(b.block_type))}
-          </div>
-          <div style="padding:16px 20px;flex-grow:1;display:flex;flex-direction:column;justify-content:space-between;">
-            <div>
-              <h4 style="margin:0 0 6px;font-size:1.05rem;font-weight:600;">${esc(b.name)}</h4>
-              <p style="margin:0 0 16px;font-size:0.8rem;color:var(--text-secondary);">Type: ${esc(b.block_type)} &bull; Saved ${formatDate(b.created_at)}</p>
-            </div>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-sm btn-danger" style="padding:4px 8px;font-size:0.75rem;border-radius:6px;width:100%;justify-content:center;" onclick="dBdeleteReusableBlock('${b.id}')">Delete Template</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-    }
-    
-    html += `
-      <div class="section-card" style="margin:0;border:1px dashed rgba(255,255,255,0.2);border-radius:16px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:216px;cursor:pointer;" onclick="switchAppView('builder')">
-        <div style="width:48px;height:48px;border-radius:50%;background:rgba(99,102,241,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </div>
-        <span style="font-size:0.95rem;font-weight:600;color:var(--text);">Create via Canvas</span>
-        <p style="margin:8px 0 0;font-size:0.75rem;color:var(--text-muted);text-align:center;padding:0 16px;">Select any block in the App Builder canvas and save as Reusable Template.</p>
-      </div>
-    `;
-    
-    container.innerHTML = html;
-  } catch (err) {
-    container.innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load reusable templates</div>`;
-  }
-}
-
-async function dBdeleteReusableBlock(blockId) {
-  if (!confirm('Are you sure you want to delete this reusable block template?')) return;
-  try {
-    toast('Deleting template...', 'info');
-    const res = await api('GET', '/v1/apps/' + appId + '/settings');
-    const setting = res.find(s => s.key === 'reusable_blocks');
-    let reusableBlocks = setting ? (setting.value || []) : [];
-    
-    reusableBlocks = reusableBlocks.filter(b => b.id !== blockId);
-    
-    await api('PUT', '/v1/apps/' + appId + '/settings', {
-      key: 'reusable_blocks',
-      value: reusableBlocks
-    });
-    
-    toast('Template deleted successfully', 'success');
-    loadReusableBlocksList();
-    await loadReusableBlocksForBuilder();
-    renderDBuilderPalette();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}
-
-window.dBSaveAsReusable = dBSaveAsReusable;
-window.dBaddReusableBlock = dBaddReusableBlock;
-window.loadReusableBlocksList = loadReusableBlocksList;
-window.dBdeleteReusableBlock = dBdeleteReusableBlock;
-window.loadReusableBlocksForBuilder = loadReusableBlocksForBuilder;
-
 // ── Billing & Subscription ──
-
-function loadBilling() {
-  const container = document.getElementById('billingPlansContainer');
-  if (!container) return;
-  
-  const cfg = (appData && appData.config) || {};
-  const plan = cfg.plan_tier || 'Free';
-  
-  let html = '';
-  
-  // Standard Plan Card
-  html += `
-    <div class="section-card" style="margin-top:0;border:1px solid ${plan === 'Free' ? 'var(--primary)' : 'rgba(255,255,255,0.08)'};background:var(--bg-surface);border-radius:20px;position:relative;overflow:hidden;">
-      ${plan === 'Free' ? '<div style="position:absolute;top:20px;right:20px;background:rgba(99,102,241,0.15);color:var(--primary);border:1px solid rgba(99,102,241,0.3);font-size:0.7rem;font-weight:700;padding:6px 12px;border-radius:99px;text-transform:uppercase;letter-spacing:0.05em;">Current Plan</div>' : ''}
-      <div class="section-card-body" style="padding:40px 32px;">
-        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-          <div style="width:48px;height:48px;border-radius:12px;background:var(--bg-hover);color:var(--text);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          </div>
-          <h3 style="margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-0.01em;">Standard Plan</h3>
-        </div>
-        <div style="font-size:3rem;font-weight:800;margin-bottom:8px;letter-spacing:-0.03em;color:var(--text);">$0<span style="font-size:1.2rem;font-weight:600;color:var(--text-secondary);-webkit-text-fill-color:var(--text-secondary);">/mo</span></div>
-        <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 32px;line-height:1.5;">Free forever. Perfect for getting started.</p>
-        <ul style="list-style:none;padding:0;margin:0 0 32px;font-size:0.95rem;display:flex;flex-direction:column;gap:16px;">
-          <li style="display:flex;align-items:center;gap:12px;color:var(--text-secondary);"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Up to 3 Pages</span></li>
-          <li style="display:flex;align-items:center;gap:12px;color:var(--text-secondary);"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Standard Preview</span></li>
-          <li style="display:flex;align-items:center;gap:12px;color:var(--text-secondary);"><div style="background:var(--bg-hover);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Standard Themes</span></li>
-        </ul>
-        ${plan === 'Free' ? `
-          <button class="btn btn-outline" disabled style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;opacity:0.6;">Active Plan</button>
-        ` : `
-          <button class="btn btn-outline" onclick="changePlan('Free')" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;border:1px solid rgba(255,255,255,0.2);">Downgrade to Standard</button>
-        `}
-      </div>
-    </div>
-  `;
-
-  // Pro Plan Card
-  html += `
-    <div class="section-card" style="margin-top:0;border:1px solid ${plan === 'Pro' ? 'var(--primary)' : 'rgba(255,255,255,0.08)'};background:var(--bg-surface);box-shadow:${plan === 'Pro' ? '0 12px 32px rgba(99,102,241,0.15)' : 'none'};border-radius:20px;position:relative;overflow:hidden;">
-      ${plan === 'Pro' ? '<div style="position:absolute;top:20px;right:20px;background:rgba(99,102,241,0.15);color:var(--primary);border:1px solid rgba(99,102,241,0.3);font-size:0.7rem;font-weight:700;padding:6px 12px;border-radius:99px;text-transform:uppercase;letter-spacing:0.05em;">Current Plan</div>' : ''}
-      <div class="section-card-body" style="padding:40px 32px;">
-        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
-          <div style="width:48px;height:48px;border-radius:12px;background:rgba(99,102,241,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(255,255,255,0.2);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          </div>
-          <h3 style="margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-0.01em;text-shadow:0 2px 4px var(--bg-input);">Pro Plan</h3>
-        </div>
-        <div style="font-size:3rem;font-weight:800;margin-bottom:8px;letter-spacing:-0.03em;color:var(--text);">$29<span style="font-size:1.2rem;font-weight:600;color:var(--text-secondary);-webkit-text-fill-color:var(--text-secondary);">/mo</span></div>
-        <p style="color:var(--text-secondary);font-size:0.9rem;margin:0 0 32px;line-height:1.5;">Billed monthly. Complete developer platform access.</p>
-        <ul style="list-style:none;padding:0;margin:0 0 32px;font-size:0.95rem;display:flex;flex-direction:column;gap:16px;">
-          <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Unlimited Pages & Custom Blocks</span></li>
-          <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Unlimited OTA Updates</span></li>
-          <li style="display:flex;align-items:center;gap:12px;"><div style="background:rgba(99,102,241,0.2);border-radius:50%;padding:4px;display:flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg></div> <span style="font-weight:500;">Push Notifications Broadcasting</span></li>
-        </ul>
-        ${plan === 'Pro' ? `
-          <button class="btn btn-outline" onclick="changePlan('Free')" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;">Cancel Subscription</button>
-        ` : `
-          <button class="btn btn-primary" onclick="openBillingPortal()" style="width:100%;justify-content:center;padding:14px;font-size:1rem;font-weight:600;border-radius:12px;box-shadow:0 6px 20px rgba(99,102,241,0.4);border:none;">Upgrade to Pro</button>
-        `}
-      </div>
-    </div>
-  `;
-
-  container.innerHTML = html;
-}
 
 function openBillingPortal() {
   openModal('billingModal');
@@ -3373,7 +3785,11 @@ async function changePlan(tier) {
     appData = await api('GET', '/apps/' + appId);
     
     toast('Subscription plan updated to ' + tier + ' successfully!', 'success');
-    loadBilling();
+    const container = document.getElementById('billingPlansContainer');
+    if (container) {
+      container.setAttribute('hx-get', '/hx/apps/' + encodeURIComponent(appId) + '/billing');
+      htmx.ajax('GET', container.getAttribute('hx-get'), { target: '#billingPlansContainer', swap: 'outerHTML' });
+    }
     renderOverview();
   } catch (err) {
     toast(err.message, 'error');
@@ -3386,7 +3802,6 @@ async function submitBillingUpgrade(e) {
   await changePlan('Pro');
 }
 
-window.loadBilling = loadBilling;
 window.openBillingPortal = openBillingPortal;
 window.changePlan = changePlan;
 window.submitBillingUpgrade = submitBillingUpgrade;
@@ -3427,3 +3842,753 @@ function dBhandleMediaUpload(elId, inputElem, maxMb, append) {
   reader.readAsDataURL(file);
 }
 window.dBhandleMediaUpload = dBhandleMediaUpload;
+
+// ── AI Generator ──
+let aiGeneratedPages = null;
+
+function openAIGenerator() {
+  document.getElementById('aiGeneratorModal').classList.remove('hidden');
+  document.getElementById('aiGenResult').style.display = 'none';
+  document.getElementById('aiPromptInput').value = '';
+  document.getElementById('aiGenerateBtn').disabled = false;
+  document.getElementById('aiGenerateBtn').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>\n          Generate';
+  aiGeneratedPages = null;
+}
+
+function closeAIGenerator() {
+  document.getElementById('aiGeneratorModal').classList.add('hidden');
+}
+window.openAIGenerator = openAIGenerator;
+window.closeAIGenerator = closeAIGenerator;
+
+function setAIPrompt(text) {
+  document.getElementById('aiPromptInput').value = text;
+  document.getElementById('aiPromptInput').focus();
+}
+window.setAIPrompt = setAIPrompt;
+
+async function runAIGeneration() {
+  const prompt = document.getElementById('aiPromptInput').value.trim();
+  if (!prompt) {
+    toast('Please describe what you want to generate', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('aiGenerateBtn');
+  const resultDiv = document.getElementById('aiGenResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Generating...';
+  resultDiv.style.display = 'none';
+
+  try {
+    const res = await api('POST', '/v1/apps/' + appId + '/generate', { prompt });
+    aiGeneratedPages = res.pages || [];
+
+    const badge = res.ai_generated ? '<span class="ai-gen-badge ai-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg> AI</span>' : '<span class="ai-gen-badge template-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Template</span>';
+    const matched = res.matched_category ? '<div class="ai-gen-result-category">' + badge + ' <span style="opacity:0.6">Matched:</span> ' + esc(res.matched_category) + '</div>' : '';
+
+    resultDiv.innerHTML = matched + `
+      <div style="margin-bottom:12px;font-size:0.82rem;font-weight:600;color:var(--text);">Generated ${aiGeneratedPages.length} page${aiGeneratedPages.length !== 1 ? 's' : ''}</div>
+      <div class="ai-gen-result-pages">
+        ${aiGeneratedPages.map(p => `
+          <div class="ai-gen-result-page">
+            <div class="ai-gen-result-page-icon">▤</div>
+            <span class="ai-gen-result-page-name">${esc(p.name || 'Page')}</span>
+            <span class="ai-gen-result-page-count">${(p.elements || []).length} element${(p.elements || []).length !== 1 ? 's' : ''}</span>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-sm btn-success" onclick="applyAIGeneratedPages()" style="width:100%;justify-content:center;font-weight:600;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Apply to App
+      </button>
+    `;
+    resultDiv.style.display = 'block';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>\n          Generate';
+    btn.disabled = false;
+  } catch (err) {
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div class="ai-gen-error">Failed to generate: ' + esc(err.message) + '</div>';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>\n          Generate';
+    btn.disabled = false;
+  }
+}
+window.runAIGeneration = runAIGeneration;
+
+async function applyAIGeneratedPages() {
+  if (!aiGeneratedPages || !aiGeneratedPages.length) return;
+
+  try {
+    const cfg = (appData && appData.config) || {};
+    const pc = cfg.project_config || {};
+    const existingPages = pc.pages || [];
+
+    const newIds = new Set(aiGeneratedPages.map(p => p.id));
+    const filteredExisting = existingPages.filter(p => !newIds.has(p.id));
+    pc.pages = [...aiGeneratedPages, ...filteredExisting];
+    cfg.project_config = pc;
+
+    await api('PUT', '/apps/' + appId, cfg);
+    appData = await api('GET', '/apps/' + appId);
+
+    toast('Applied ' + aiGeneratedPages.length + ' generated page' + (aiGeneratedPages.length !== 1 ? 's' : ''), 'success');
+    closeAIGenerator();
+
+    const builderView = document.querySelector('.app-view[data-appview="builder"]');
+    if (builderView && builderView.classList.contains('active')) {
+      openDashboardBuilder();
+    }
+    loadPages();
+  } catch (err) {
+    toast('Failed to apply: ' + err.message, 'error');
+  }
+}
+window.applyAIGeneratedPages = applyAIGeneratedPages;
+
+// ── AI Chat Agent (FAB) ──
+let fabChatOpen = false;
+
+function dBToggleChat() {
+  fabChatOpen = !fabChatOpen;
+  const overlay = document.getElementById('fabChatOverlay');
+  const fabBtn = document.getElementById('fabChatBtn');
+  overlay.style.display = fabChatOpen ? 'flex' : 'none';
+  fabBtn.classList.toggle('open', fabChatOpen);
+  if (fabChatOpen) {
+    const saved = localStorage.getItem('apt_chat_model');
+    const select = document.getElementById('fabChatModel');
+    if (saved) {
+      select.value = saved;
+      if (select.value !== saved) {
+        select.value = 'gemini/gemini-3.5-flash';
+        localStorage.setItem('apt_chat_model', 'gemini/gemini-3.5-flash');
+      }
+    }
+    refreshAiProviderStatus();
+  }
+}
+window.dBToggleChat = dBToggleChat;
+
+// Fetch and show provider status
+async function refreshAiProviderStatus() {
+  try {
+    const providers = await api('GET', '/v1/ai/providers');
+    const configured = providers.filter(p => p.configured);
+    const statusEl = document.getElementById('fabChatProviderStatus');
+    if (statusEl) {
+      if (configured.length === 0) {
+        statusEl.innerHTML = '<span style="color:var(--danger)">⚠ No AI providers configured</span>';
+        statusEl.style.cursor = 'pointer';
+        statusEl.onclick = () => showAiSettings();
+      } else {
+        statusEl.innerHTML = configured.map(p =>
+          `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;background:rgba(34,208,108,0.1);color:#22d06c;font-size:0.65rem;font-weight:600;">✓ ${p.name}</span>`
+        ).join(' ');
+        statusEl.onclick = null;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to fetch AI providers:', e);
+  }
+}
+window.refreshAiProviderStatus = refreshAiProviderStatus;
+
+// AI Provider Settings Modal
+function showAiSettings() {
+  const overlay = document.getElementById('aiSettingsOverlay');
+  if (overlay) overlay.classList.remove('hidden');
+  try {
+    const keys = JSON.parse(localStorage.getItem('apt_ai_keys') || '{}');
+    if (keys.OPENAI_API_KEY) document.getElementById('aiKeyOpenai').value = keys.OPENAI_API_KEY;
+    if (keys.GROQ_API_KEY) document.getElementById('aiKeyGroq').value = keys.GROQ_API_KEY;
+    if (keys.GEMINI_API_KEY) document.getElementById('aiKeyGemini').value = keys.GEMINI_API_KEY;
+    if (keys.OPENROUTER_API_KEY) document.getElementById('aiKeyOpenrouter').value = keys.OPENROUTER_API_KEY;
+    if (keys.OLLAMA_HOST) document.getElementById('aiKeyOllama').value = keys.OLLAMA_HOST;
+  } catch(e){}
+}
+window.showAiSettings = showAiSettings;
+
+function closeAiSettings() {
+  const overlay = document.getElementById('aiSettingsOverlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+window.closeAiSettings = closeAiSettings;
+
+async function saveAiSettings() {
+  const keysDef = [
+    { key: 'OPENAI_API_KEY', el: 'aiKeyOpenai' },
+    { key: 'GROQ_API_KEY', el: 'aiKeyGroq' },
+    { key: 'GEMINI_API_KEY', el: 'aiKeyGemini' },
+    { key: 'OPENROUTER_API_KEY', el: 'aiKeyOpenrouter' },
+    { key: 'OLLAMA_HOST', el: 'aiKeyOllama' },
+  ];
+  
+  const customKeys = {};
+  for (const {key, el} of keysDef) {
+    const input = document.getElementById(el);
+    if (input && input.value.trim()) {
+      customKeys[key] = input.value.trim();
+    }
+  }
+  
+  localStorage.setItem('apt_ai_keys', JSON.stringify(customKeys));
+  showToast('API keys saved securely in your browser.', 'success');
+  closeAiSettings();
+  refreshAiProviderStatus();
+}
+window.saveAiSettings = saveAiSettings;
+
+const statusDot = () => document.querySelector('.fab-chat-header-status .status-dot');
+const statusText = () => document.querySelector('.fab-chat-header-status');
+function setAgentStatus(state) {
+  const dot = statusDot();
+  const txt = statusText();
+  if (!dot || !txt) return;
+  if (state === 'thinking') {
+    dot.style.background = '#f59e0b';
+    txt.innerHTML = '<span class="status-dot"></span> Thinking...';
+  } else {
+    dot.style.background = '#22d06c';
+    txt.innerHTML = '<span class="status-dot"></span> Ready';
+  }
+}
+
+function addChatMessage(text, role, actions) {
+  const container = document.getElementById('fabChatMessages');
+  const row = document.createElement('div');
+  row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
+  const avatarLetter = role === 'user' ? 'U' : 'AI';
+  const avatarClass = role === 'user' ? 'user-avatar' : 'ai-avatar';
+  let html = '<div class="msg-avatar ' + avatarClass + '">' + avatarLetter + '</div>';
+  html += '<div class="msg-bubble"><div class="msg-content">' + esc(text) + '</div>';
+  if (actions && actions.length > 0) {
+    html += '<div class="msg-actions">';
+    for (const a of actions) {
+      const cls = a.success ? 'success' : 'error';
+      const icon = a.success ? '&#10003;' : '&#10007;';
+      html += '<div class="action-card ' + cls + '"><span class="action-icon">' + icon + '</span>' + esc(a.description) + '</div>';
+    }
+    html += '</div>';
+  }
+  if (role === 'ai' && actions && actions.length > 0 && actions.some(a => a.success)) {
+    html += '<div class="msg-updated-toast"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> App updated</div>';
+  }
+  html += '</div>';
+  row.innerHTML = html;
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showChatTyping(show) {
+  const container = document.getElementById('fabChatMessages');
+  const existing = document.getElementById('chatTypingIndicator');
+  if (existing) existing.remove();
+  if (!show) {
+    setAgentStatus('ready');
+    return;
+  }
+  setAgentStatus('thinking');
+  const div = document.createElement('div');
+  div.id = 'chatTypingIndicator';
+  div.className = 'chat-agent-thinking';
+  div.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div><span class="thinking-label">Building...</span>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showChatError(msg) {
+  const el = document.getElementById('fabChatError');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => { el.classList.remove('show'); }, 5000);
+}
+
+function dBSendQuick(msg) {
+  const input = document.getElementById('fabChatInput');
+  input.value = msg;
+  dBSendChat();
+}
+window.dBSendQuick = dBSendQuick;
+
+async function dBSendChat() {
+  const input = document.getElementById('fabChatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  if (!appId) return showChatError('No app selected');
+
+  input.value = '';
+  addChatMessage(msg, 'user');
+  showChatTyping(true);
+  setAgentStatus('thinking');
+
+  const model = document.getElementById('fabChatModel').value;
+  localStorage.setItem('apt_chat_model', model);
+
+  const btn = document.getElementById('fabChatSendBtn');
+  btn.disabled = true;
+
+  try {
+    let custom_api_keys = {};
+    try { custom_api_keys = JSON.parse(localStorage.getItem('apt_ai_keys') || '{}'); } catch(e){}
+    const res = await api('POST', '/v1/apps/' + appId + '/agent/chat', { message: msg, model: model, custom_api_keys });
+    showChatTyping(false);
+    btn.disabled = false;
+
+    if (res.reply) {
+      addChatMessage(res.reply, 'ai', res.actions || []);
+    }
+
+    if (res.app_updated) {
+      try {
+        appData = await api('GET', '/apps/' + appId);
+        if (typeof openDashboardBuilder === 'function') {
+          openDashboardBuilder();
+        }
+        if (typeof loadPages === 'function') {
+          loadPages();
+        }
+      } catch (e) {
+        console.warn('Failed to refresh app data:', e);
+      }
+    }
+  } catch (e) {
+    showChatTyping(false);
+    btn.disabled = false;
+    showChatError(e.message || 'Failed to send message');
+  }
+}
+window.dBSendChat = dBSendChat;
+let templateSelectedCategory = null;
+let templateSelectedPages = [];
+
+function openTemplateBrowser() {
+  document.getElementById('templateBrowserModal').classList.remove('hidden');
+  document.getElementById('applyTemplateBtn').disabled = true;
+  templateSelectedCategory = null;
+  templateSelectedPages = [];
+  renderTemplateBrowser();
+}
+
+function closeTemplateBrowser() {
+  document.getElementById('templateBrowserModal').classList.add('hidden');
+}
+window.openTemplateBrowser = openTemplateBrowser;
+window.closeTemplateBrowser = closeTemplateBrowser;
+
+function renderTemplateBrowser() {
+  const cats = Object.keys(TEMPLATES);
+  const tabsContainer = document.getElementById('templateCategoryTabs');
+  const gridContainer = document.getElementById('templateBrowserGrid');
+  if (!tabsContainer || !gridContainer) return;
+
+  if (!templateSelectedCategory && cats.length) {
+    templateSelectedCategory = cats[0];
+  }
+
+  tabsContainer.innerHTML = cats.map(key => {
+    const cat = TEMPLATES[key];
+    const active = key === templateSelectedCategory ? ' active' : '';
+    return `<button class="template-cat-btn${active}" onclick="selectTemplateCategory('${key}')">
+      ${cat.icon || '▤'} ${esc(cat.name)}
+      <span class="template-cat-count">${cat.pages.length}</span>
+    </button>`;
+  }).join('');
+
+  const cat = templateSelectedCategory ? TEMPLATES[templateSelectedCategory] : null;
+  if (!cat) {
+    gridContainer.innerHTML = '<div class="template-empty">Select a category</div>';
+    document.getElementById('applyTemplateBtn').disabled = true;
+    return;
+  }
+
+  gridContainer.innerHTML = cat.pages.map(page => {
+    const types = {};
+    (page.elements || []).forEach(el => {
+      const t = el.type || 'block';
+      types[t] = (types[t] || 0) + 1;
+    });
+    const elemTags = Object.entries(types).slice(0, 4).map(([t, c]) =>
+      `<span class="template-page-card-elem">${t}${c > 1 ? ' ×' + c : ''}</span>`
+    ).join('');
+    const desc = page.elements && page.elements.length
+      ? page.elements.length + ' element' + (page.elements.length !== 1 ? 's' : '')
+      : 'Empty page';
+    return `<div class="template-page-card${templateSelectedPages.includes(page.id) ? ' selected' : ''}" onclick="toggleTemplatePage('${page.id}')">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="template-page-card-icon" style="background:${cat.color || 'var(--primary-subtle)'};color:#fff;">${cat.icon || '▤'}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="template-page-card-name">${esc(page.name)}</div>
+          <div class="template-page-card-desc">${desc}</div>
+        </div>
+      </div>
+      <div class="template-page-card-elements">${elemTags}</div>
+    </div>`;
+  }).join('') || '<div class="template-empty">No pages in this category</div>';
+
+  document.getElementById('applyTemplateBtn').disabled = templateSelectedPages.length === 0;
+}
+
+function selectTemplateCategory(key) {
+  templateSelectedCategory = key;
+  templateSelectedPages = [];
+  renderTemplateBrowser();
+}
+window.selectTemplateCategory = selectTemplateCategory;
+
+function toggleTemplatePage(pageId) {
+  const idx = templateSelectedPages.indexOf(pageId);
+  if (idx >= 0) {
+    templateSelectedPages.splice(idx, 1);
+  } else {
+    templateSelectedPages.push(pageId);
+  }
+  renderTemplateBrowser();
+}
+window.toggleTemplatePage = toggleTemplatePage;
+
+async function applySelectedTemplate() {
+  if (!templateSelectedCategory || templateSelectedPages.length === 0) return;
+
+  const cat = TEMPLATES[templateSelectedCategory];
+  if (!cat) return;
+
+  const btn = document.getElementById('applyTemplateBtn');
+  btn.disabled = true;
+  btn.textContent = 'Applying...';
+
+  try {
+    const selectedPagesData = cat.pages
+      .filter(p => templateSelectedPages.includes(p.id))
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        elements: JSON.parse(JSON.stringify(p.elements || []))
+      }));
+
+    if (!selectedPagesData.length) {
+      toast('No pages selected', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>\n          Apply Template';
+      return;
+    }
+
+    // Merge with existing pages: keep existing pages, add/replace template pages
+    const cfg = (appData && appData.config) || {};
+    const pc = cfg.project_config || {};
+    const existingPages = pc.pages || [];
+
+    // Remove any existing pages that have the same IDs as template pages
+    const templateIds = new Set(selectedPagesData.map(p => p.id));
+    const filteredExisting = existingPages.filter(p => !templateIds.has(p.id));
+
+    // Prepend template pages so they appear first
+    pc.pages = [...selectedPagesData, ...filteredExisting];
+    cfg.project_config = pc;
+
+    await api('PUT', '/apps/' + appId, cfg);
+    appData = await api('GET', '/apps/' + appId);
+
+    toast('Applied ' + selectedPagesData.length + ' page' + (selectedPagesData.length !== 1 ? 's' : '') + ' from ' + cat.name, 'success');
+
+    closeTemplateBrowser();
+
+    // Refresh builder if it's open
+    const builderView = document.querySelector('.app-view[data-appview="builder"]');
+    if (builderView && builderView.classList.contains('active')) {
+      openDashboardBuilder();
+    }
+
+    // Refresh pages view
+    loadPages();
+  } catch (err) {
+    toast('Failed to apply template: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>\n          Apply Template';
+  }
+}
+window.applySelectedTemplate = applySelectedTemplate;
+
+// ── Analytics Dashboard ──
+let analyticsData = null;
+let analyticsActiveTab = 'usage';
+
+async function loadAnalytics() {
+  const container = document.getElementById('analyticsDashboard');
+  if (!container) return;
+  container.innerHTML = '<div class="loading"><span class="spinner"></span> Loading analytics...</div>';
+
+  try {
+    analyticsData = await api('GET', '/v1/apps/' + appId + '/analytics');
+    renderAnalytics();
+  } catch (err) {
+    container.innerHTML = '<div class="analytics-empty"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><strong>Failed to load analytics</strong><span>' + esc(err.message) + '</span></div>';
+  }
+}
+
+function renderAnalytics() {
+  const container = document.getElementById('analyticsDashboard');
+  if (!container || !analyticsData) return;
+
+  const updated = document.getElementById('analyticsLastUpdated');
+  if (updated && analyticsData.generatedAt) {
+    const d = new Date(analyticsData.generatedAt);
+    updated.textContent = 'Updated ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  container.innerHTML = `
+    <div class="analytics-tabs">
+      <button class="analytics-tab-btn${analyticsActiveTab === 'usage' ? ' active' : ''}" onclick="switchAnalyticsTab('usage')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Usage
+      </button>
+      <button class="analytics-tab-btn${analyticsActiveTab === 'crashes' ? ' active' : ''}" onclick="switchAnalyticsTab('crashes')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Crashes
+        ${analyticsData.crashes ? '<span class="tab-count">' + analyticsData.crashes.totalCrashes + '</span>' : ''}
+      </button>
+      <button class="analytics-tab-btn${analyticsActiveTab === 'engagement' ? ' active' : ''}" onclick="switchAnalyticsTab('engagement')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        Engagement
+      </button>
+    </div>
+    <div class="analytics-tab-content${analyticsActiveTab === 'usage' ? ' active' : ''}" id="analyticsTabUsage">
+      ${renderUsageTab()}
+    </div>
+    <div class="analytics-tab-content${analyticsActiveTab === 'crashes' ? ' active' : ''}" id="analyticsTabCrashes">
+      ${renderCrashesTab()}
+    </div>
+    <div class="analytics-tab-content${analyticsActiveTab === 'engagement' ? ' active' : ''}" id="analyticsTabEngagement">
+      ${renderEngagementTab()}
+    </div>
+  `;
+}
+
+function switchAnalyticsTab(tab) {
+  analyticsActiveTab = tab;
+  renderAnalytics();
+}
+window.switchAnalyticsTab = switchAnalyticsTab;
+
+function changeArrow(val) {
+  if (val > 0) return '<span class="analytics-card-change up"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg> ' + val + '%</span>';
+  if (val < 0) return '<span class="analytics-card-change down"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg> ' + Math.abs(val) + '%</span>';
+  return '<span class="analytics-card-change stable">— 0%</span>';
+}
+
+function renderUsageTab() {
+  const u = analyticsData.usage || {};
+  const dauArr = u.dauPerDay || [];
+  const sessArr = u.sessionsPerDay || [];
+
+  const maxDau = Math.max(...dauArr, 1);
+  const maxSess = Math.max(...sessArr, 1);
+  const last14 = dauArr.slice(-14);
+
+  return `
+    <div class="analytics-grid">
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Daily Active Users</div>
+        <div class="analytics-card-value">${esc(u.dailyActiveUsers || 0)}</div>
+        ${changeArrow(8)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Monthly Active Users</div>
+        <div class="analytics-card-value">${esc((u.monthlyActiveUsers || 0).toLocaleString())}</div>
+        ${changeArrow(12)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Total Sessions</div>
+        <div class="analytics-card-value">${esc((u.totalSessions || 0).toLocaleString())}</div>
+        ${changeArrow(5)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Avg Session Duration</div>
+        <div class="analytics-card-value">${esc(u.avgSessionDuration || 0)}<small>sec</small></div>
+        ${changeArrow(3)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg> New Users (7d)</div>
+        <div class="analytics-card-value">${esc(u.newUsersLast7d || 0)}</div>
+        ${changeArrow(15)}
+      </div>
+    </div>
+
+    <div class="analytics-chart">
+      <div class="analytics-chart-header">
+        <div>
+          <div class="analytics-chart-title">Daily Active Users</div>
+          <div class="analytics-chart-value">${esc(u.dailyActiveUsers || 0)} <small>today</small></div>
+        </div>
+      </div>
+      <div class="bar-chart">
+        ${last14.map((v, i) => `<div class="bar-chart-col" style="height:${(v / maxDau * 100)}%;background:var(--primary);opacity:${0.4 + (i / last14.length) * 0.6};"><div class="bar-tooltip">${esc(v)} users</div></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="analytics-chart">
+      <div class="analytics-chart-header">
+        <div>
+          <div class="analytics-chart-title">Sessions per Day</div>
+          <div class="analytics-chart-value">${esc(sessArr[sessArr.length - 1] || 0)} <small>today</small></div>
+        </div>
+      </div>
+      <div class="bar-chart">
+        ${sessArr.slice(-14).map((v, i) => `<div class="bar-chart-col" style="height:${(v / maxSess * 100)}%;background:#22d06c;opacity:${0.4 + (i / 14) * 0.6};"><div class="bar-tooltip">${esc(v)} sessions</div></div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderCrashesTab() {
+  const c = analyticsData.crashes || {};
+  const top = c.topCrashes || [];
+  const crashDays = c.crashesPerDay || [];
+
+  const maxCrash = Math.max(...crashDays, 1);
+
+  return `
+    <div class="analytics-grid">
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Total Crashes</div>
+        <div class="analytics-card-value" style="color:${c.totalCrashes > 0 ? 'var(--danger)' : 'var(--text)'};">${esc(c.totalCrashes || 0)}</div>
+        ${c.totalCrashes > 0 ? changeArrow(-12) : '<span class="analytics-card-change stable">No crashes</span>'}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Crash Free Rate</div>
+        <div class="analytics-card-value">${esc(c.crashFreeRate || 100)}<small>%</small></div>
+        ${(c.crashFreeRate || 100) >= 99 ? '<span class="analytics-card-change up">Healthy</span>' : '<span class="analytics-card-change down">Needs attention</span>'}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Affected Users</div>
+        <div class="analytics-card-value">${esc(c.affectedUsers || 0)}</div>
+        ${c.affectedUsers > 0 ? changeArrow(-8) : '<span class="analytics-card-change stable">None</span>'}
+      </div>
+    </div>
+
+    <div class="analytics-chart">
+      <div class="analytics-chart-header">
+        <div>
+          <div class="analytics-chart-title">Crashes per Day (Last 14 days)</div>
+          <div class="analytics-chart-value">${esc(crashDays[crashDays.length - 1] || 0)} <small>today</small></div>
+        </div>
+      </div>
+      <div class="bar-chart">
+        ${crashDays.slice(-14).map((v, i) => `<div class="bar-chart-col" style="height:${(v / maxCrash * 100) || 2}%;background:${v > 0 ? '#ef4444' : 'var(--border)'};opacity:${0.5 + (i / 14) * 0.5};"><div class="bar-tooltip">${v > 0 ? v + ' crash' + (v > 1 ? 'es' : '') : 'No crashes'}</div></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Error</th><th>Count</th><th>Version</th><th>Last Seen</th></tr></thead>
+        <tbody>
+          ${top.length ? top.map(crash => `
+            <tr>
+              <td><span class="crash-error">${esc(crash.error || '')}</span></td>
+              <td class="crash-count">${esc(crash.count || 0)}</td>
+              <td><span class="crash-version">${esc(crash.version || '—')}</span></td>
+              <td style="color:var(--text-muted);font-size:0.75rem;">${crash.lastSeen ? new Date(crash.lastSeen).toLocaleDateString() : '—'}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted);">No crashes reported</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderEngagementTab() {
+  const e = analyticsData.engagement || {};
+  const screens = e.topScreens || [];
+  const events = e.topEvents || [];
+
+  const maxScreenViews = Math.max(...screens.map(s => s.views), 1);
+
+  return `
+    <div class="analytics-grid">
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg> Day 1 Retention</div>
+        <div class="analytics-card-value">${esc(e.retentionDay1 || 0)}<small>%</small></div>
+        ${changeArrow(3)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/></svg> Day 7 Retention</div>
+        <div class="analytics-card-value">${esc(e.retentionDay7 || 0)}<small>%</small></div>
+        ${changeArrow(5)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg> Day 30 Retention</div>
+        <div class="analytics-card-value">${esc(e.retentionDay30 || 0)}<small>%</small></div>
+        ${changeArrow(-2)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Total Screen Views</div>
+        <div class="analytics-card-value">${esc((e.totalScreenViews || 0).toLocaleString())}</div>
+        ${changeArrow(10)}
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Sessions / User</div>
+        <div class="analytics-card-value">${esc(e.avgSessionPerUser || 0)}<small>x</small></div>
+        ${changeArrow(7)}
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <div class="analytics-section-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        Retention Rates
+      </div>
+      <div class="analytics-chart" style="padding:20px;">
+        ${[
+          { label: 'Day 1', value: e.retentionDay1 || 0, color: '#6366f1' },
+          { label: 'Day 7', value: e.retentionDay7 || 0, color: '#22d06c' },
+          { label: 'Day 30', value: e.retentionDay30 || 0, color: '#f59e0b' },
+        ].map(r => `
+          <div class="retention-bar">
+            <div class="retention-bar-label">${r.label}</div>
+            <div class="retention-bar-track">
+              <div class="retention-bar-fill" style="width:${r.value}%;background:${r.color};"></div>
+            </div>
+            <div class="retention-bar-value">${r.value}%</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Screen</th><th>Views</th><th>% of Total</th></tr></thead>
+        <tbody>
+          ${screens.length ? screens.map(s => `
+            <tr>
+              <td style="font-weight:600;">${esc(s.screen || '')}</td>
+              <td>${esc((s.views || 0).toLocaleString())}</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="flex:1;max-width:120px;height:6px;background:var(--bg-input);border-radius:3px;overflow:hidden;">
+                    <div style="height:100%;width:${Math.min(s.percentage || 0, 100)}%;background:var(--primary);border-radius:3px;"></div>
+                  </div>
+                  <span style="font-weight:600;font-size:0.78rem;color:var(--text-secondary);">${esc(s.percentage || 0)}%</span>
+                </div>
+              </td>
+            </tr>
+          `).join('') : '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-muted);">No screen data available</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Event</th><th>Count</th><th>Trend</th></tr></thead>
+        <tbody>
+          ${events.length ? events.map(ev => `
+            <tr>
+              <td style="font-weight:600;">${esc(ev.event || '')}</td>
+              <td>${esc((ev.count || 0).toLocaleString())}</td>
+              <td><span class="analytics-trend ${ev.trend || 'stable'}">${ev.trend === 'up' ? '↑' : ev.trend === 'down' ? '↓' : '→'} ${ev.trend || 'stable'}</span></td>
+            </tr>
+          `).join('') : '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text-muted);">No event data available</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}

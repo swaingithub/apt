@@ -13,6 +13,7 @@ mod services;
 use api::{routes, ConfigCache};
 use db::Database;
 use services::builder::EASBuilder;
+use services::preview::PreviewBroadcaster;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,6 +34,8 @@ async fn main() -> anyhow::Result<()> {
     let tracker_data = web::Data::new(build_tracker);
     let config_cache = ConfigCache::new(60);
     let cache_data = web::Data::new(config_cache);
+    let preview_broadcaster = PreviewBroadcaster::new();
+    let preview_data = web::Data::new(preview_broadcaster);
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
@@ -41,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
             .app_data(db_data.clone())
             .app_data(tracker_data.clone())
             .app_data(cache_data.clone())
+            .app_data(preview_data.clone())
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())

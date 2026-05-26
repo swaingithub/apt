@@ -79,7 +79,13 @@ pub async fn create_app(
     }
 }
 
-pub async fn download_source(path: web::Path<String>) -> HttpResponse {
+pub async fn download_source(req: HttpRequest, path: web::Path<String>) -> HttpResponse {
+    if crate::auth::extract_user_id(&req).is_none() {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "auth_required",
+            "message": "Please sign in to download source code."
+        }));
+    }
     let app_id = path.into_inner();
     let zip_path = format!("./output/{}_source.zip", app_id);
 

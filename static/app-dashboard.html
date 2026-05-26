@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>App Dashboard — Apt</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="any">
+  <link rel="stylesheet" href="/styles.css">
   <style>
     .app-page { display: flex; height: 100vh; overflow: hidden; }
     .app-content { flex: 1; overflow-y: auto; padding: 32px; min-width: 0; }
@@ -271,7 +273,7 @@
     .dbuilder-palette-item span { font-size: 1.15rem; }
     .dbuilder-palette-item-label { font-size: 0.68rem; font-weight: 600; color: var(--text-secondary); }
 
-    .dbuilder-canvas-wrap { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); transition: all 0.3s; }
+    .dbuilder-canvas-wrap { display: flex; flex-direction: column; background: var(--bg); transition: all 0.3s; }
     .dbuilder-canvas-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); overflow: visible; flex-shrink: 0; background: var(--bg-surface); transition: all 0.3s; }
     .dbuilder-page-tabs { display: flex; align-items: center; gap: 6px; flex-shrink: 0; transition: opacity 0.3s; }
     .dbuilder-page-dropdown-container { position: relative; display: inline-block; flex-shrink: 0; }
@@ -295,8 +297,8 @@
     .dbuilder-action-btn:active { transform: scale(0.96); }
 
     /* Figma/Blueprint DOT Grid background */
-    .dbuilder-phone-frame { flex: 1; display: flex; align-items: center; justify-content: center; background-color: var(--bg); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; padding: 16px 8px; overflow: auto; }
-    .dbuilder-hardware-frame { width: 275px; height: 560px; background: #000000; border-radius: 36px; padding: 10px; box-shadow: 0 15px 40px rgba(0,0,0,0.15), 0 0 0 2px rgba(255,255,255,0.8); position: relative; margin: auto; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .dbuilder-phone-frame { flex: 1; display: flex; align-items: center; justify-content: center; background-color: var(--bg); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; padding: 16px; overflow: auto; }
+    .dbuilder-hardware-frame { width: 100%; max-width: 375px; aspect-ratio: 9 / 19.5; background: #000000; border-radius: 44px; padding: 10px; box-shadow: 0 15px 50px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.08); position: relative; margin: auto; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); flex-shrink: 0; }
     .dbuilder-phone-notch { width: 80px; height: 22px; background: #000000; border-radius: 11px; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10; transition: all 0.3s; }
     .dbuilder-phone-screen { flex: 1; width: 100%; background: var(--phone-bg, #f4f6fa); border-radius: 28px; padding: 38px 8px 8px; position: relative; overflow-y: auto; color: var(--phone-text, #000); scrollbar-width: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     .dbuilder-phone-screen::-webkit-scrollbar { display: none; }
@@ -318,6 +320,71 @@
     .dbuilder-props-header { padding: 8px 12px; font-size: 0.82rem; font-weight: 600; border-bottom: 1px solid var(--border); color: var(--text); }
     .dbuilder-props-body { padding: 10px; }
     .dbuilder-props-empty { text-align: center; padding: 30px 10px; font-size: 0.75rem; color: var(--text-muted); }
+    
+    /* ── AI Agent UI ── */
+    .fab-btn { position: fixed; bottom: 24px; right: 24px; z-index: 10000; width: 56px; height: 56px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--primary), #a855f7); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(99,102,241,0.35); transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
+    .fab-btn:hover { transform: scale(1.1) translateY(-2px); box-shadow: 0 8px 30px rgba(99,102,241,0.5); }
+    .fab-btn:active { transform: scale(0.92); }
+    .fab-btn svg { transition: transform 0.3s; }
+    .fab-btn.open svg { transform: rotate(45deg); }
+
+    .fab-chat-panel, .fab-chat-overlay { position: fixed; bottom: 88px; right: 24px; z-index: 9999; width: 440px; max-width: calc(100vw - 48px); height: 600px; max-height: calc(100vh - 120px); border-radius: 20px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: 0 16px 64px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; animation: fabSlideUp 0.25s cubic-bezier(0.4,0,0.2,1); }
+    @keyframes fabSlideUp { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    .fab-chat-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg-surface); }
+    .fab-chat-avatar { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, var(--primary), #a855f7); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; color: #fff; flex-shrink: 0; box-shadow: 0 2px 8px rgba(99,102,241,0.25); position: relative; }
+    .fab-chat-avatar-dot { position: absolute; bottom: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: #22d06c; border: 2px solid var(--bg-surface); }
+    .fab-chat-header-info { flex: 1; min-width: 0; }
+    .fab-chat-header-name { font-size: 0.85rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .fab-chat-header-status { font-size: 0.65rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+    .fab-chat-header-status .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #22d06c; }
+    .fab-chat-header-actions { display: flex; align-items: center; gap: 2px; }
+    .fab-chat-icon-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 5px; border-radius: 8px; display: flex; transition: all 0.15s; }
+    .fab-chat-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+    .fab-chat-provider-status { display: flex; align-items: center; gap: 4px; padding: 5px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; min-height: 26px; }
+    .fab-provider-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 4px; font-size: 0.62rem; font-weight: 600; background: rgba(34,208,108,0.1); color: #22d06c; }
+
+    .fab-chat-messages { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: thin; }
+    .fab-chat-messages .msg-row { display: flex; gap: 8px; max-width: 100%; }
+    .fab-chat-messages .msg-row.ai-row { align-self: flex-start; }
+    .fab-chat-messages .msg-row.user-row { align-self: flex-end; flex-direction: row-reverse; }
+    .msg-avatar { width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: #fff; margin-top: 2px; }
+    .msg-avatar.ai-avatar { background: linear-gradient(135deg, var(--primary), #a855f7); }
+    .msg-avatar.user-avatar { background: var(--text-muted); }
+    .msg-bubble { max-width: calc(100% - 34px); }
+    .msg-bubble .msg-content { padding: 10px 14px; border-radius: 14px; font-size: 0.8rem; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; }
+    .msg-row.ai-row .msg-content { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
+    .msg-row.user-row .msg-content { background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+    .msg-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .action-card { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 500; border: 1px solid var(--border); background: var(--bg-surface); }
+    .action-card.success { border-color: rgba(34,208,108,0.25); background: rgba(34,208,108,0.06); color: #22d06c; }
+    .action-card.error { border-color: rgba(239,68,68,0.25); background: rgba(239,68,68,0.06); color: #ef4444; }
+    .action-card .action-icon { font-size: 0.85rem; flex-shrink: 0; }
+    .msg-updated-toast { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-size: 0.68rem; font-weight: 600; background: rgba(34,208,108,0.1); color: #22d06c; margin-top: 6px; }
+    .msg-updated-toast svg { flex-shrink: 0; }
+
+    .chat-agent-thinking { display: flex; align-items: center; gap: 8px; padding: 0 0 0 34px; align-self: flex-start; }
+    .chat-agent-thinking .thinking-dots { display: flex; align-items: center; gap: 3px; padding: 8px 14px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 14px; border-bottom-left-radius: 4px; }
+    .chat-agent-thinking .thinking-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: agentTyping 1.4s infinite both; }
+    .chat-agent-thinking .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .chat-agent-thinking .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes agentTyping { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.1); } }
+    .chat-agent-thinking .thinking-label { font-size: 0.65rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    .fab-chat-error { display: none; margin: 0 16px; padding: 8px 12px; border-radius: 8px; font-size: 0.72rem; background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); flex-shrink: 0; }
+    .fab-chat-error.show { display: block; }
+
+    .fab-chat-input-wrap { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--bg-card); align-items: flex-end; flex-shrink: 0; }
+    .fab-chat-input { flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-input); color: var(--text); font-size: 0.8rem; font-family: inherit; resize: none; outline: none; line-height: 1.4; max-height: 80px; transition: border-color 0.15s; }
+    .fab-chat-input:focus { border-color: var(--primary); }
+    .fab-chat-send { width: 36px; height: 36px; border-radius: 12px; border: none; background: linear-gradient(135deg, var(--primary), #a855f7); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; box-shadow: 0 2px 8px rgba(99,102,241,0.25); }
+    .fab-chat-send:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.35); }
+    .fab-chat-send:disabled { opacity: 0.4; cursor: not-allowed; filter: none; transform: none; box-shadow: none; }
+
+    .fab-quick-actions { display: flex; gap: 4px; padding: 6px 16px 0; flex-shrink: 0; flex-wrap: wrap; }
+    .fab-quick-action { padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-secondary); font-size: 0.68rem; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+    .fab-quick-action:hover { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,0.04); }
     .dbuilder-prop-group { margin-bottom: 8px; }
     .dbuilder-prop-label { font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
     .dbuilder-prop-row { display: flex; gap: 4px; align-items: center; }
@@ -385,8 +452,8 @@
     .menu-empty span { font-size: 0.78rem; margin-top: 2px; }
 
     /* Menu phone preview */
-    .menu-preview-frame { background: #000; border-radius: 28px; padding: 10px; width: 260px; margin: 0 auto; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
-    .menu-preview-screen { background: #fff; border-radius: 20px; overflow: hidden; min-height: 160px; display: flex; flex-direction: column; }
+    .menu-preview-frame { background: #000; border-radius: 36px; padding: 10px; width: 100%; max-width: 280px; margin: 0 auto; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+    .menu-preview-screen { background: #fff; border-radius: 24px; overflow: hidden; min-height: 180px; display: flex; flex-direction: column; }
     .menu-preview-header { padding: 16px 16px 8px; font-size: 1rem; font-weight: 600; color: #000; text-align: center; }
     .menu-preview-content { flex: 1; padding: 28px 16px; display: flex; align-items: center; justify-content: center; }
     .menu-preview-content span { font-size: 0.8rem; color: #aaa; }
@@ -396,10 +463,204 @@
     .menu-preview-tab .tab-label { font-size: 0.6rem; margin-top: 2px; font-weight: 500; }
     .menu-preview-tab.active { color: #007aff; }
 
+    /* SDK Marketplace */
+    .sdk-category { margin-bottom: 24px; }
+    .sdk-category-title { font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:12px; padding-left:2px; }
+    .sdk-category-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
+    .sdk-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:14px 14px 12px; cursor:pointer; transition:all 0.15s; position:relative; }
+    .sdk-card:hover { border-color:var(--primary); box-shadow:0 2px 12px rgba(0,0,0,0.06); transform:translateY(-1px); }
+    .sdk-card-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
+    .sdk-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .sdk-status { font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:5px; background:var(--bg-surface); color:var(--text-muted); text-transform:uppercase; letter-spacing:0.03em; }
+    .sdk-status.enabled { background:rgba(34,208,108,0.12); color:#22d06c; }
+    .sdk-name { font-size:0.85rem; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .sdk-desc { font-size:0.72rem; color:var(--text-secondary); line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .sdk-card-footer { display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:8px; border-top:1px solid var(--border); }
+    .sdk-cat-tag { font-size:0.62rem; font-weight:600; padding:2px 7px; border-radius:4px; background:var(--bg-surface); color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; }
+    .sdk-enabled-dot { width:6px; height:6px; border-radius:50%; background:#22d06c; box-shadow:0 0 6px rgba(34,208,108,0.4); }
+
+    /* SDK Config Modal */
+    .sdk-modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:10000; }
+    .sdk-modal-panel { background:var(--bg-card); border-radius:16px; width:440px; max-width:92vw; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.25); position:relative; }
+    .sdk-modal-close { position:absolute; top:14px; right:14px; width:28px; height:28px; border-radius:7px; border:none; background:var(--bg-hover); color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.85rem; z-index:1; }
+    .sdk-modal-close:hover { background:var(--danger-subtle); color:var(--danger); }
+    .sdk-modal-header { display:flex; align-items:center; gap:12px; padding:20px 22px 14px; }
+    .sdk-modal-icon { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .sdk-modal-name { font-size:1rem; font-weight:700; }
+    .sdk-modal-cat { font-size:0.7rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; }
+    .sdk-toggle-wrap { margin-left:auto; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+    .sdk-toggle-label { font-size:0.78rem; font-weight:600; color:var(--text-secondary); min-width:58px; }
+    .sdk-toggle { position:relative; display:inline-block; width:38px; height:22px; flex-shrink:0; }
+    .sdk-toggle input { opacity:0; width:0; height:0; }
+    .sdk-toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--border); border-radius:11px; transition:all 0.2s; }
+    .sdk-toggle-slider:before { content:''; position:absolute; height:16px; width:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:all 0.2s; }
+    .sdk-toggle input:checked + .sdk-toggle-slider { background:var(--primary); }
+    .sdk-toggle input:checked + .sdk-toggle-slider:before { transform:translateX(16px); }
+    .sdk-modal-desc { font-size:0.82rem; color:var(--text-secondary); line-height:1.5; padding:0 22px 16px; }
+    .sdk-modal-fields { padding:0 22px 16px; display:flex; flex-direction:column; gap:12px; }
+    .sdk-field-row { display:flex; flex-direction:column; gap:4px; }
+    .sdk-field-label { font-size:0.78rem; font-weight:600; color:var(--text); }
+    .sdk-field-input { width:100%; padding:10px 12px; font-size:0.85rem; background:var(--bg-input); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:monospace; outline:none; }
+    .sdk-field-input:focus { border-color:var(--primary); }
+    .sdk-modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:14px 22px; border-top:1px solid var(--border); background:var(--bg-surface); border-radius:0 0 16px 16px; }
+
     /* Emoji picker */
     .emoji-picker-popup { position: fixed; z-index: 10000; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 30px rgba(0,0,0,0.15); padding: 8px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-width: 260px; }
     .emoji-picker-popup button { background: none; border: none; border-radius: 4px; padding: 4px; cursor: pointer; font-size: 1.2rem; line-height: 1; transition: background 0.1s; }
     .emoji-picker-popup button:hover { background: var(--primary-subtle); }
+
+    /* AI Generator */
+    .ai-gen-panel { background: var(--bg-card); border-radius: 16px; width: 540px; max-width: 92vw; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; }
+    .ai-gen-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 22px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .ai-gen-header-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(168,85,247,0.15)); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .ai-gen-header h3 { margin: 0; font-size: 1rem; font-weight: 700; }
+    .ai-gen-header p { margin: 3px 0 0; font-size: 0.78rem; color: var(--text-muted); }
+    .ai-gen-close { width: 28px; height: 28px; border-radius: 7px; border: none; background: var(--bg-hover); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+    .ai-gen-close:hover { background: var(--danger-subtle); color: var(--danger); }
+    .ai-gen-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+    .ai-gen-input-wrap { margin-bottom: 16px; }
+    .ai-gen-textarea { width: 100%; padding: 14px 16px; font-size: 0.88rem; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-family: inherit; resize: vertical; min-height: 100px; outline: none; transition: border-color 0.2s; line-height: 1.5; }
+    .ai-gen-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+    .ai-gen-textarea::placeholder { color: var(--text-muted); }
+    .ai-gen-hints { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+    .ai-gen-hints span { font-size: 0.72rem; color: var(--text-muted); font-weight: 500; }
+    .ai-gen-hint-btn { padding: 5px 12px; font-size: 0.72rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; font-weight: 500; white-space: nowrap; }
+    .ai-gen-hint-btn:hover { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,0.05); }
+    .ai-gen-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 22px; border-top: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; }
+    .ai-gen-footer .btn { display: inline-flex; align-items: center; font-weight: 600; }
+    .ai-gen-loading { display: flex; align-items: center; justify-content: center; padding: 32px; gap: 10px; color: var(--text-muted); font-size: 0.85rem; }
+    .ai-gen-loading .spinner { width: 20px; height: 20px; border-width: 2px; }
+    .ai-gen-result-category { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 999px; background: rgba(99,102,241,0.08); color: var(--primary); font-size: 0.78rem; font-weight: 600; margin-bottom: 14px; }
+    .ai-gen-result-pages { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .ai-gen-result-page { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; }
+    .ai-gen-result-page-icon { width: 28px; height: 28px; border-radius: 7px; background: var(--primary-subtle); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.75rem; }
+    .ai-gen-result-page-name { font-size: 0.85rem; font-weight: 600; flex: 1; }
+    .ai-gen-result-page-count { font-size: 0.72rem; color: var(--text-muted); }
+    .ai-gen-error { padding: 16px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px; color: var(--danger); font-size: 0.82rem; }
+    .ai-gen-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; }
+    .ai-badge { background: linear-gradient(135deg,rgba(99,102,241,0.12),rgba(168,85,247,0.12)); color: #a78bfa; }
+    .template-badge { background: rgba(234,179,8,0.1); color: #eab308; }
+
+    /* Real-time Collaboration */
+    .collab-users { display: flex; align-items: center; gap: 3px; }
+    .collab-avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 700; color: #fff; cursor: pointer; position: relative; border: 2px solid var(--bg-card); transition: transform 0.15s; }
+    .collab-avatar:hover { transform: translateY(-2px); z-index: 2; }
+    .collab-avatar + .collab-avatar { margin-left: -6px; }
+    .collab-avatar .collab-tooltip { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 0.68rem; font-weight: 600; color: var(--text); white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; }
+    .collab-avatar .collab-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 4px solid transparent; border-top-color: var(--border); }
+    .collab-avatar:hover .collab-tooltip { display: block; }
+    .collab-avatar.online { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px #22d06c; }
+    .collab-count { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); margin-left: 2px; }
+
+    /* Analytics Dashboard */
+    .analytics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .analytics-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; transition: border-color 0.15s; }
+    .analytics-card:hover { border-color: var(--primary); }
+    .analytics-card-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; display: flex; align-items: center; gap: 6px; }
+    .analytics-card-value { font-size: 1.6rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; line-height: 1.1; }
+    .analytics-card-value small { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); letter-spacing: normal; margin-left: 4px; }
+    .analytics-card-change { font-size: 0.72rem; font-weight: 600; display: flex; align-items: center; gap: 3px; }
+    .analytics-card-change.up { color: #22d06c; }
+    .analytics-card-change.down { color: #ef4444; }
+    .analytics-card-change.stable { color: var(--text-muted); }
+
+    .analytics-section { margin-bottom: 32px; }
+    .analytics-section-title { font-size: 0.82rem; font-weight: 700; color: var(--text); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .analytics-section-title svg { opacity: 0.5; flex-shrink: 0; }
+
+    .analytics-chart { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+    .analytics-chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .analytics-chart-title { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+    .analytics-chart-value { font-size: 1.4rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
+    .analytics-chart-value small { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); letter-spacing: normal; margin-left: 4px; }
+
+    .bar-chart { display: flex; align-items: flex-end; gap: 3px; height: 100px; padding-top: 8px; }
+    .bar-chart-col { flex: 1; border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.4s ease; position: relative; }
+    .bar-chart-col:hover { opacity: 0.8; }
+    .bar-chart-col .bar-tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 0.65rem; font-weight: 600; color: var(--text); white-space: nowrap; z-index: 5; margin-bottom: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .bar-chart-col:hover .bar-tooltip { display: block; }
+
+    .analytics-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 16px; }
+    .analytics-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .analytics-table th { text-align: left; padding: 12px 18px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+    .analytics-table td { padding: 12px 18px; border-bottom: 1px solid var(--border); color: var(--text); }
+    .analytics-table tr:last-child td { border-bottom: none; }
+    .analytics-table tr:hover td { background: var(--bg-hover); }
+    .analytics-table .crash-error { font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace; font-size: 0.75rem; color: var(--danger); }
+    .analytics-table .crash-version { font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: var(--bg-input); color: var(--text-muted); font-family: monospace; }
+    .analytics-table .crash-count { font-weight: 700; text-align: center; }
+
+    .analytics-trend { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+    .analytics-trend.up { background: rgba(34,208,108,0.1); color: #22d06c; }
+    .analytics-trend.down { background: rgba(239,68,68,0.1); color: #ef4444; }
+    .analytics-trend.stable { background: rgba(156,163,175,0.1); color: #9ca3af; }
+
+    .analytics-tabs { display: flex; gap: 0; background: var(--bg-surface); border-radius: 10px; padding: 3px; border: 1px solid var(--border); margin-bottom: 24px; }
+    .analytics-tab-btn { flex: 1; padding: 9px 16px; border: none; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; font-weight: 500; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .analytics-tab-btn:hover { color: var(--text-secondary); }
+    .analytics-tab-btn.active { background: var(--bg-card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-weight: 600; }
+    .analytics-tab-btn .tab-count { font-size: 0.65rem; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: var(--bg-input); color: var(--text-muted); }
+    .analytics-tab-btn.active .tab-count { background: var(--primary-subtle); color: var(--primary); }
+    .analytics-tab-content { display: none; }
+    .analytics-tab-content.active { display: block; }
+
+    .analytics-arch-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 16px; }
+    .analytics-arch-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .analytics-arch-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .analytics-arch-name { font-size: 0.9rem; font-weight: 600; flex: 1; }
+    .analytics-arch-desc { font-size: 0.72rem; color: var(--text-muted); }
+    .analytics-arch-body { padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+
+    .analytics-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; }
+    .analytics-empty svg { opacity: 0.2; margin-bottom: 16px; }
+    .analytics-empty strong { font-size: 0.95rem; color: var(--text-secondary); }
+    .analytics-empty span { font-size: 0.82rem; color: var(--text-muted); margin-top: 4px; }
+
+    .retention-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .retention-bar-label { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); width: 50px; flex-shrink: 0; }
+    .retention-bar-track { flex: 1; height: 22px; background: var(--bg-input); border-radius: 6px; overflow: hidden; }
+    .retention-bar-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 8px; font-size: 0.65rem; font-weight: 700; color: #fff; }
+    .retention-bar-value { font-size: 0.78rem; font-weight: 700; color: var(--text); width: 40px; text-align: right; }
+
+    /* Template Browser */
+    .template-browser-panel { background: var(--bg-card); border-radius: 16px; width: 680px; max-width: 92vw; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; }
+    .template-browser-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 24px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .template-browser-header h3 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    .template-browser-header p { margin: 4px 0 0; font-size: 0.78rem; color: var(--text-muted); }
+    .template-browser-close { width: 28px; height: 28px; border-radius: 7px; border: none; background: var(--bg-hover); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+    .template-browser-close:hover { background: var(--danger-subtle); color: var(--danger); }
+    .template-browser-categories { display: flex; gap: 6px; padding: 14px 24px; border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; scrollbar-width: thin; }
+    .template-cat-btn { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 0.76rem; font-weight: 600; cursor: pointer; transition: all 0.15s; flex-shrink: 0; white-space: nowrap; }
+    .template-cat-btn:hover { border-color: var(--primary); color: var(--text); background: var(--bg-hover); }
+    .template-cat-btn.active { border-color: var(--primary); background: rgba(99,102,241,0.08); color: var(--primary); }
+    .template-cat-count { font-size: 0.65rem; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
+    .template-cat-btn.active .template-cat-count { color: var(--primary); }
+    .template-browser-body { flex: 1; overflow-y: auto; padding: 16px 24px; }
+    .template-browser-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .template-page-card { background: var(--bg-surface); border: 2px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; gap: 8px; }
+    .template-page-card:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .template-page-card.selected { border-color: var(--primary); background: rgba(99,102,241,0.04); box-shadow: 0 0 0 1px rgba(99,102,241,0.2); }
+    .template-page-card-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+    .template-page-card-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+    .template-page-card-desc { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .template-page-card-elements { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
+    .template-page-card-elem { font-size: 0.62rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--bg-input); color: var(--text-muted); border: 1px solid var(--border); }
+    .template-empty { text-align: center; padding: 48px 20px; color: var(--text-muted); grid-column: 1/-1; }
+    .template-browser-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 24px; border-top: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; }
+    .template-browser-footer .btn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+    .template-browser-loading { display: flex; align-items: center; justify-content: center; padding: 60px 20px; color: var(--text-muted); font-size: 0.85rem; grid-column: 1/-1; gap: 8px; }
+
+    /* Getting Started Guide */
+    .gs-card { background: linear-gradient(135deg,rgba(99,102,241,0.06),rgba(168,85,247,0.06)); border: 1px solid rgba(99,102,241,0.15); border-radius: 14px; padding: 20px 22px; }
+    .gs-header { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+    .gs-steps { display: flex; flex-direction: column; gap: 14px; }
+    .gs-step { display: flex; gap: 12px; align-items: flex-start; }
+    .gs-step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .gs-step-body { display: flex; flex-direction: column; gap: 2px; }
+    .gs-step-body strong { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .gs-step-body span { font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; }
+    .gs-step-body a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .gs-step-body a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -412,7 +673,12 @@
     <div id="dashboardContent" style="display:none">
       <div class="top-bar">
         <div class="top-bar-left">
-          <a href="/" style="color:var(--text-muted);text-decoration:none;font-size:0.85rem">&larr; Apt Dashboard</a>
+          <a href="/app" style="color:var(--text-muted);text-decoration:none;font-size:0.85rem;display:flex;align-items:center;gap:6px;">
+            <div style="width:16px;height:16px;border-radius:4px;background:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--bg);"></div>
+            </div>
+            Apt
+          </a>
           <span style="color:var(--border);font-size:0.85rem">/</span>
           <h1 id="dashTitle">App</h1>
           <span class="app-badge" id="dashVersion">v1.0.0</span>
@@ -429,6 +695,12 @@
 
       <div class="layout-inner">
         <aside class="app-sidebar">
+          <a href="/app" class="app-sidebar-brand" style="text-decoration:none;color:var(--text);display:flex;align-items:center;gap:8px;padding:12px 16px;margin-bottom:4px;">
+            <div style="width:22px;height:22px;border-radius:5px;background:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="width:10px;height:10px;border-radius:50%;background:var(--bg);"></div>
+            </div>
+            <span style="font-weight:700;font-size:0.95rem;letter-spacing:-0.02em;">Apt</span>
+          </a>
           <div class="app-sidebar-app-info">
             <div class="app-sidebar-avatar" id="dashAvatar">A</div>
             <div class="app-sidebar-app-name" id="dashName">App</div>
@@ -439,6 +711,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
               Overview
             </button>
+            <button class="app-nav-item" data-appview="profile" onclick="switchAppView('profile')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </button>
             <button class="app-nav-item" data-appview="builder" onclick="switchAppView('builder')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 17l-5.5 4 2-7L3 9h7z"/></svg>
               Builder
@@ -447,9 +723,21 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
               App Menu
             </button>
+            <button class="app-nav-item" data-appview="routing" onclick="switchAppView('routing')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m-10-10h4m12 0h4"/><path d="m4.93 4.93 2.83 2.83m8.48 8.48 2.83 2.83m-14.14 0 2.83-2.83m8.48-8.48 2.83-2.83"/></svg>
+              Routing
+            </button>
+            <button class="app-nav-item" data-appview="analytics" onclick="switchAppView('analytics')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Analytics
+            </button>
             <button class="app-nav-item" data-appview="pages" onclick="switchAppView('pages')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Pages
+            </button>
+            <button class="app-nav-item" onclick="openTemplateBrowser()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              Templates
             </button>
             <button class="app-nav-item" data-appview="builds" onclick="switchAppView('builds')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -488,10 +776,6 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
               Settings
             </button>
-            <button class="app-nav-item" data-appview="extensions" onclick="switchAppView('extensions')">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-              Extensions
-            </button>
             <button class="app-nav-item" data-appview="integrations" onclick="switchAppView('integrations')">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
               Integrations
@@ -501,7 +785,11 @@
               Themes
             </button>
           </nav>
-          <div style="padding:12px 16px;border-top:1px solid var(--border)">
+          <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px">
+            <button class="btn btn-sm btn-ghost" onclick="if(localStorage.getItem('apt_token')){localStorage.removeItem('apt_token');localStorage.removeItem('apt_user');window.location.href='/app'}else{window.location.href='/app'}" style="width:100%;justify-content:center;color:var(--text-secondary)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:6px"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              <span id="dashAuthText">Sign In</span>
+            </button>
             <button class="btn btn-sm btn-ghost" onclick="deleteApp()" style="color:var(--danger);width:100%;justify-content:center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               Delete App
@@ -510,6 +798,11 @@
         </aside>
 
         <div class="app-content">
+          <div id="dashAnonBanner" style="display:none;background:linear-gradient(135deg,#7c5cfc,#6366f1);color:#fff;padding:8px 16px;text-align:center;font-size:13px;border-radius:8px;margin-bottom:16px;">
+            🔒 <strong>You're using Apt anonymously.</strong>
+            <a href="/app" style="color:#fff;text-decoration:underline;font-weight:600;margin-left:8px;">Sign up</a>
+            to keep your apps — anonymous data may be lost.
+          </div>
           <!-- Overview -->
           <div class="app-view active" data-appview="overview" style="padding: 0; max-width: 1200px; margin: 0 auto;">
             <!-- Clean Header -->
@@ -532,6 +825,7 @@
             <div style="display: grid; grid-template-columns: 1fr 340px; gap: 32px;">
               <!-- Left Column: Data -->
               <div style="display: flex; flex-direction: column; gap: 32px;">
+                <div id="gettingStartedGuide"></div>
                 <!-- App Details -->
                 <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border);">
@@ -547,7 +841,7 @@
                 <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border);">
                     <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0; color: var(--text);">Deployments</h3>
-                    <button class="btn btn-sm btn-primary" onclick="publishConfig()" style="font-size: 0.8rem; padding: 4px 12px; border-radius: 6px;">Deploy</button>
+                    <button class="btn btn-sm btn-primary" id="deployBtn" onclick="publishConfig()" data-loading-text="Deploying..." style="font-size: 0.8rem; padding: 4px 12px; border-radius: 6px;">Deploy</button>
                   </div>
                   <div id="publishedList" style="padding: 20px; font-size: 0.85rem; color: var(--text-secondary); text-align: center;">
                     No deployments found.
@@ -564,7 +858,7 @@
                     <button class="btn btn-sm btn-ghost" onclick="openBuilder()" style="font-size: 0.8rem; padding: 4px 10px;">Open Builder</button>
                   </div>
                   <div style="padding: 32px 24px; display: flex; justify-content: center; background: var(--bg);">
-                    <div class="dbuilder-hardware-frame" style="transform: scale(0.8); transform-origin: top center; margin-bottom: -120px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                    <div class="dbuilder-hardware-frame" style="max-width:280px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
                       <div class="dbuilder-phone-notch"></div>
                       <div class="dbuilder-phone-screen" id="miniPreview" style="background: #ffffff;">
                         <div style="text-align:center; padding:40px 0; color:var(--text-muted); font-size:0.75rem;">Loading preview...</div>
@@ -588,6 +882,211 @@
             </div>
           </div>
 
+          <!-- Profile -->
+          <div class="app-view" data-appview="profile">
+            <style>
+              .profile-view-header {
+                padding: 32px 40px;
+                border-bottom: 1px solid var(--border);
+                background: var(--bg-card);
+                margin-bottom: 32px;
+              }
+              .profile-view-header h2 {
+                font-size: 1.8rem;
+                font-weight: 700;
+                color: var(--text);
+                margin: 0 0 8px 0;
+                letter-spacing: -0.02em;
+              }
+              .profile-view-header p {
+                color: var(--text-secondary);
+                margin: 0;
+                font-size: 0.95rem;
+              }
+              .profile-card {
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                box-shadow: var(--shadow-sm);
+                overflow: hidden;
+                transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+              }
+              .profile-card:hover {
+                box-shadow: 0 12px 32px -8px rgba(0,0,0,0.1);
+                border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+              }
+              .danger-card:hover {
+                border-color: var(--danger);
+                box-shadow: 0 12px 32px -8px color-mix(in srgb, var(--danger) 20%, transparent);
+              }
+              .profile-card-header {
+                padding: 24px;
+                border-bottom: 1px solid var(--border);
+                background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 3%, transparent) 0%, transparent 100%);
+              }
+              .profile-card-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: var(--text);
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin: 0;
+              }
+              .profile-card-icon {
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                background: var(--primary-subtle);
+                color: var(--primary);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .profile-card-body {
+                padding: 24px;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+              }
+              .profile-card-footer {
+                padding: 16px 24px;
+                background: var(--bg-elevated);
+                border-top: 1px solid var(--border);
+                display: flex;
+                justify-content: flex-end;
+              }
+              .custom-input {
+                width: 100%;
+                padding: 12px 16px;
+                border-radius: 10px;
+                background: var(--bg-surface);
+                border: 1px solid var(--border);
+                color: var(--text);
+                font-size: 0.95rem;
+                transition: all 0.2s ease;
+              }
+              .custom-input:focus {
+                background: var(--bg-card);
+                border-color: var(--primary);
+                box-shadow: 0 0 0 4px var(--primary-subtle);
+                outline: none;
+              }
+              .custom-label {
+                display: block;
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                margin-bottom: 8px;
+              }
+              .custom-btn {
+                padding: 10px 24px;
+                border-radius: 10px;
+                font-size: 0.95rem;
+                font-weight: 600;
+                transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+                border: none;
+              }
+              .custom-btn.btn-primary {
+                background: var(--primary);
+                color: #fff;
+              }
+              .custom-btn.btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--primary) 50%, transparent);
+              }
+              .custom-btn.btn-danger {
+                background: var(--danger);
+                color: #fff;
+              }
+              .custom-btn.btn-danger:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--danger) 50%, transparent);
+              }
+            </style>
+            
+            <div class="profile-view-header">
+              <h2>Profile Settings</h2>
+              <p>Manage your account details and security preferences.</p>
+            </div>
+            
+            <div style="max-width:680px; padding: 0 40px 60px;">
+              <div id="profileSection" style="display: flex; flex-direction: column; gap: 32px;">
+                
+                <!-- Account Info Card -->
+                <div class="profile-card">
+                  <div class="profile-card-header">
+                    <h3 class="profile-card-title">
+                      <div class="profile-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      </div>
+                      Account Information
+                    </h3>
+                  </div>
+                  <div class="profile-card-body">
+                    <div style="margin: 0;">
+                      <label for="profileName" class="custom-label">Full Name</label>
+                      <input type="text" id="profileName" class="custom-input" placeholder="Your name">
+                    </div>
+                    <div style="margin: 0;">
+                      <label for="profileEmail" class="custom-label">Email Address</label>
+                      <input type="email" id="profileEmail" class="custom-input" placeholder="email@example.com">
+                    </div>
+                  </div>
+                  <div class="profile-card-footer">
+                    <button class="custom-btn btn-primary" id="saveProfileBtn" onclick="saveProfile()" data-loading-text="Saving...">Save Changes</button>
+                  </div>
+                </div>
+
+                <!-- Password Card -->
+                <div class="profile-card">
+                  <div class="profile-card-header">
+                    <h3 class="profile-card-title">
+                      <div class="profile-card-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      </div>
+                      Change Password
+                    </h3>
+                  </div>
+                  <div class="profile-card-body">
+                    <div style="margin: 0;">
+                      <label for="pwCurrent" class="custom-label">Current Password</label>
+                      <input type="password" id="pwCurrent" class="custom-input" placeholder="Enter current password">
+                    </div>
+                    <div style="margin: 0;">
+                      <label for="pwNew" class="custom-label">New Password</label>
+                      <input type="password" id="pwNew" class="custom-input" placeholder="At least 6 characters">
+                    </div>
+                  </div>
+                  <div class="profile-card-footer">
+                    <button class="custom-btn btn-primary" id="changePwBtn" onclick="changePassword()" data-loading-text="Updating...">Update Password</button>
+                  </div>
+                </div>
+
+                <!-- Danger Zone Card -->
+                <div class="profile-card danger-card" style="border-color: color-mix(in srgb, var(--danger) 30%, var(--border));">
+                  <div style="padding: 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 250px;">
+                      <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--danger); display: flex; align-items: center; gap: 10px; margin: 0 0 8px 0;">
+                        <div style="width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); display: flex; align-items: center; justify-content: center;">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </div>
+                        Danger Zone
+                      </h3>
+                      <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 0; line-height: 1.5; padding-left: 46px;">Permanently delete your account and all associated data. This action cannot be undone.</p>
+                    </div>
+                    <button class="custom-btn btn-danger" onclick="deleteAccount()" style="flex-shrink: 0;">Delete Account</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
           <!-- Builder -->
           <div class="app-view" data-appview="builder">
             <div class="app-view-header" style="flex-shrink:0">
@@ -596,7 +1095,7 @@
                 <span id="autoSaveIndicator" style="font-size: 0.75rem; color: var(--text-muted); display:flex; align-items:center; gap:6px;">
                   <span class="indicator-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-muted);"></span> Saved
                 </span>
-                <button class="btn btn-sm btn-primary" id="btnPublishBuilder" onclick="publishBuilderUpdate()" style="background: var(--primary); border-color: var(--primary);">Publish Live App</button>
+                <button class="btn btn-sm btn-primary" id="btnPublishBuilder" onclick="publishBuilderUpdate()" data-loading-text="Publishing..." style="background: var(--primary); border-color: var(--primary);">Publish Live App</button>
               </div>
             </div>
             <div class="dbuilder-layout" id="dbuilderLayout">
@@ -615,7 +1114,7 @@
                   <div style="font-size:0.75rem; color:var(--text-muted); text-align:center; padding:20px;">No elements in this page yet</div>
                 </div>
               </div>
-              <div class="dbuilder-canvas-wrap" style="position:relative; display:flex; flex-direction:column; overflow:hidden; flex:1;">
+              <div class="dbuilder-canvas-wrap" style="position:relative; display:flex; flex-direction:column; flex:1;">
                 <div class="dbuilder-canvas-header">
                   <div class="dbuilder-page-tabs" id="dbuilderPageTabs"></div>
                   <button class="dbuilder-tab-add-btn" onclick="dBaddPage()" title="Add page">
@@ -641,6 +1140,11 @@
                       Android
                     </button>
                   </div>
+                  <button class="btn btn-xs" onclick="openAIGenerator()" title="Generate with AI" style="margin-left: 8px; border: 1px solid var(--border); padding: 4px 10px; font-size: 0.7rem; border-radius: 16px; background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.12)); color: var(--text); display:flex; align-items:center; cursor:pointer; font-weight:600; transition:all 0.2s;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    AI Generate
+                  </button>
+                  <div class="collab-users" id="collabUsers" style="display:none;align-items:center;gap:4px;margin-left:8px;"></div>
                   <button class="btn btn-xs" onclick="dBToggleConsole()" id="btnToggleConsole" title="Toggle Console" style="margin-left: 8px; border: 1px solid var(--border); padding: 4px 10px; font-size: 0.7rem; border-radius: 16px; background: transparent; color: var(--text-muted); display:flex; align-items:center; cursor:pointer; font-weight:600; transition:all 0.2s;">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
                     Console
@@ -649,6 +1153,7 @@
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     Play Preview
                   </button>
+
                 </div>
                 <div class="dbuilder-phone-frame">
                   <div class="dbuilder-hardware-frame">
@@ -704,7 +1209,7 @@
             <div class="app-view-header">
               <h2>App Menu <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted)">— Navigation &amp; tab bar</span></h2>
               <div style="display:flex;gap:8px">
-                <button class="btn btn-sm btn-success" onclick="saveAppMenu()">Save Menu</button>
+                <button class="btn btn-sm btn-success" id="saveMenuBtn" onclick="saveAppMenu()" data-loading-text="Saving...">Save Menu</button>
               </div>
             </div>
             <div class="menu-type-selector" id="menuTypeSelector"></div>
@@ -738,6 +1243,19 @@
             </div>
           </div>
 
+          <!-- Routing -->
+          <div class="app-view" data-appview="routing">
+            <div class="app-view-header">
+              <h2>Routing <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted)">— Page paths &amp; deep linking</span></h2>
+            </div>
+            <div id="routingContainer"
+              hx-get="/hx/apps/APP_ID_PLACEHOLDER/routing"
+              hx-trigger="none"
+              hx-swap="innerHTML">
+              <div class="loading"><span class="spinner"></span> Loading routing...</div>
+            </div>
+          </div>
+
           <!-- Pages -->
           <div class="app-view" data-appview="pages">
             <div class="app-view-header">
@@ -752,7 +1270,7 @@
             </div>
             <div id="addPageForm" class="add-page-form hidden">
               <input type="text" id="newPageNameInput" class="form-input" placeholder="Page name (e.g. Profile)" style="flex:1">
-              <button class="btn btn-sm btn-primary" onclick="createPage()">Create</button>
+              <button class="btn btn-sm btn-primary" id="createPageBtn" onclick="createPage()" data-loading-text="Creating...">Create</button>
               <button class="btn btn-sm btn-secondary" onclick="hideAddPageForm()">Cancel</button>
             </div>
           </div>
@@ -776,7 +1294,7 @@
             <div class="app-view-header">
               <h2>Configuration</h2>
               <div class="app-view-actions">
-                <button class="btn btn-sm btn-success" onclick="saveConfig()">Save Config</button>
+                <button class="btn btn-sm btn-success" id="saveConfigBtn" onclick="saveConfig()" data-loading-text="Saving...">Save Config</button>
               </div>
             </div>
             <div id="appConfigForm" class="config-form">
@@ -835,31 +1353,11 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Block
               </button>
             </div>
-            <div class="overview-grid" style="grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:24px;">
-              <div class="section-card" style="margin:0;cursor:pointer;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
-                <div style="height:140px;background:var(--bg-surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--primary);">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
-                </div>
-                <div style="padding:16px 20px;">
-                  <h4 style="margin:0 0 6px;font-size:1.05rem;font-weight:600;">Hero Header</h4>
-                  <p style="margin:0;font-size:0.8rem;color:var(--text-secondary);">Used in 3 pages</p>
-                </div>
-              </div>
-              <div class="section-card" style="margin:0;cursor:pointer;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;overflow:hidden;">
-                <div style="height:140px;background:var(--bg-surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                </div>
-                <div style="padding:16px 20px;">
-                  <h4 style="margin:0 0 6px;font-size:1.05rem;font-weight:600;">Product Carousel</h4>
-                  <p style="margin:0;font-size:0.8rem;color:var(--text-secondary);">Used in 1 page</p>
-                </div>
-              </div>
-              <div class="section-card" style="margin:0;border:1px dashed rgba(255,255,255,0.2);border-radius:16px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:216px;cursor:pointer;">
-                <div style="width:48px;height:48px;border-radius:50%;background:rgba(99,102,241,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </div>
-                <span style="font-size:0.95rem;font-weight:600;color:var(--text);">Create New</span>
-              </div>
+            <div class="overview-grid" id="blocksGrid" style="grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:24px;"
+              hx-get="/hx/apps/APP_ID_PLACEHOLDER/blocks"
+              hx-trigger="none"
+              hx-swap="outerHTML">
+              <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Loading...</div>
             </div>
           </div>
 
@@ -907,7 +1405,7 @@
                   <h4 style="margin:0 0 6px;font-size:1.15rem;font-weight:600;color:var(--text);">Trigger OTA Update</h4>
                   <p style="margin:0;font-size:0.9rem;color:var(--text-secondary);">Push JavaScript & Asset changes directly to users' devices instantly without App Store review.</p>
                 </div>
-                <button class="btn btn-primary" onclick="triggerOtaUpdate()" style="padding:14px 28px;font-size:1rem;border-radius:12px;box-shadow:0 8px 24px rgba(99,102,241,0.4);">Publish OTA <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+                <button class="btn btn-primary" hx-post="/hx/apps/APP_ID_PLACEHOLDER/ota/trigger" hx-target="#otaUpdatesList" hx-swap="outerHTML" style="padding:14px 28px;font-size:1rem;border-radius:12px;box-shadow:0 8px 24px rgba(99,102,241,0.4);">Publish OTA <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:6px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
               </div>
             </div>
             
@@ -915,9 +1413,12 @@
               <div class="section-card-header" style="padding:20px 24px;border-bottom:1px solid var(--border);">
                 <h3 style="font-size:1.1rem;font-weight:600;margin:0;">OTA Update History</h3>
               </div>
-              <div class="section-card-body" style="padding:20px;" id="otaUpdatesList">
+              <div class="section-card-body" style="padding:20px;" id="otaUpdatesList"
+                hx-get="/hx/apps/APP_ID_PLACEHOLDER/ota"
+                hx-trigger="none"
+                hx-swap="innerHTML">
                 <div class="empty-state" style="padding:40px;text-align:center;color:var(--text-muted);">
-                  No OTA updates pushed yet.
+                  Loading...
                 </div>
               </div>
             </div>
@@ -927,7 +1428,7 @@
           <div class="app-view" data-appview="languages">
             <div class="app-view-header">
               <h2>Localization</h2>
-              <button class="btn btn-sm btn-primary" style="display:flex;align-items:center;gap:6px;" onclick="addLanguage()">
+              <button class="btn btn-sm btn-primary" style="display:flex;align-items:center;gap:6px;" id="addLocaleBtn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Locale
               </button>
             </div>
@@ -941,7 +1442,7 @@
                     <th style="padding:20px 24px;text-align:right;font-weight:600;color:var(--text-secondary);">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="languagesTableBody">
+                <tbody id="languages-table-body">
                   <tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-muted);">Loading languages...</td></tr>
                 </tbody>
               </table>
@@ -953,8 +1454,11 @@
             <div class="app-view-header">
               <h2>Billing &amp; Subscription</h2>
             </div>
-            <div id="billingPlansContainer" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
-              <!-- Dynamic plans rendered here -->
+            <div id="billingPlansContainer" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;"
+              hx-get="/hx/apps/APP_ID_PLACEHOLDER/billing"
+              hx-trigger="none"
+              hx-swap="outerHTML">
+              <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Loading plans...</div>
             </div>
           </div>
 
@@ -964,7 +1468,7 @@
               <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
                 <h2>Publish to Stores</h2>
                 <div style="display:flex;gap:12px;">
-                  <button class="btn btn-sm btn-outline" style="padding:10px 20px;border-radius:10px;font-weight:600;border-color:var(--border);" onclick="saveStoreCredentials()">
+                  <button class="btn btn-sm btn-outline" id="saveStoreCredsBtn" onclick="saveStoreCredentials()" data-loading-text="Saving..." style="padding:10px 20px;border-radius:10px;font-weight:600;border-color:var(--border);">
                     Save Credentials
                   </button>
                   <button class="btn btn-sm btn-primary" style="padding:10px 20px;border-radius:10px;display:flex;align-items:center;gap:8px;font-weight:600;box-shadow:0 4px 12px rgba(99,102,241,0.3);" onclick="triggerStoreSubmit()">
@@ -1046,9 +1550,10 @@
           <div class="app-view" data-appview="settings">
             <div class="app-view-header">
               <h2>App Settings</h2>
-              <button class="btn btn-sm btn-success" style="padding:8px 20px;border-radius:6px;font-weight:600;" onclick="saveAppSettings()">Save Changes</button>
             </div>
             <div class="section-card" style="margin-top:0;max-width:640px;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
+              <form hx-put="/hx/apps/{{app_id}}/settings" hx-target="#app-settings-result" hx-swap="outerHTML"
+                    hx-trigger="submit" id="appSettingsForm">
               <div class="section-card-body settings-form" style="padding:32px;">
                 <div style="display:flex;align-items:center;gap:24px;margin-bottom:32px;padding-bottom:32px;border-bottom:1px solid rgba(255,255,255,0.08);">
                   <div style="width:84px;height:84px;border-radius:20px;background:var(--bg-input);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--primary);cursor:pointer;position:relative;overflow:hidden;">
@@ -1062,134 +1567,113 @@
                 </div>
                 <div class="form-row" style="margin-bottom:24px;">
                   <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">App Name</label>
-                  <input type="text" id="pageEditAppName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;">
+                  <input type="text" name="app_name" id="pageEditAppName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;">
                   <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">As it appears on the home screen</div>
                 </div>
                 <div class="form-row" style="margin-bottom:24px;">
                   <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Display Name (Internal)</label>
-                  <input type="text" id="pageEditDisplayName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;">
+                  <input type="text" name="display_name" id="pageEditDisplayName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;">
                 </div>
                 <div class="form-row" style="margin-bottom:24px;">
                   <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Package Name / Bundle ID</label>
-                  <input type="text" id="pageEditPackageName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:monospace;font-size:0.9rem;"   placeholder="com.example.app">
+                  <input type="text" name="package_name" id="pageEditPackageName" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:monospace;font-size:0.9rem;" placeholder="com.example.app">
                 </div>
                 <div class="form-row" style="margin-bottom:0;">
                   <label style="font-size:0.85rem;font-weight:600;margin-bottom:8px;">Version Name</label>
-                  <input type="text" id="pageEditVersion" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;"   placeholder="1.0.0">
+                  <input type="text" name="version" id="pageEditVersion" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.95rem;" placeholder="1.0.0">
                 </div>
               </div>
+              <div style="padding:0 32px 32px;display:flex;justify-content:flex-end;">
+                <button type="submit" class="btn btn-sm btn-success" style="padding:10px 24px;border-radius:8px;font-weight:600;">Save Changes</button>
+              </div>
+              </form>
             </div>
+            <div id="app-settings-result"></div>
           </div>
 
           <!-- Integrations -->
           <div class="app-view" data-appview="integrations">
-            <div class="app-view-header" style="flex-direction:column;align-items:flex-start;gap:8px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="app-view-header" style="flex-direction:column;align-items:flex-start;gap:8px;padding-bottom:24px;border-bottom:1px solid var(--border);">
               <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
-                <h2>E-Commerce Integrations</h2>
-                <button class="btn btn-sm btn-primary" style="padding:10px 20px;border-radius:10px;font-weight:600;" onclick="saveIntegrations()">Save Connections</button>
+                <div>
+                  <h2>Integrations &amp; SDKs</h2>
+                  <p style="color:var(--text-secondary);font-size:0.9rem;margin:4px 0 0;">Connect your store and enable third-party SDKs for payments, logistics, analytics, and more.</p>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <span id="sdkEnabledCount" style="font-size:0.82rem;color:var(--text-muted);font-weight:500;">0 SDKs active</span>
+                  <button class="btn btn-sm btn-primary" id="saveIntegrationsBtn" onclick="saveIntegrations()" data-loading-text="Saving..." style="padding:10px 20px;border-radius:10px;font-weight:600;">Save All</button>
+                </div>
               </div>
-              <p style="color:var(--text-secondary);font-size:0.95rem;max-width:600px;margin:0;">Connect your headless store via API to populate your app with native product grids and carts.</p>
             </div>
-            <div class="overview-grid" style="grid-template-columns:1fr 1fr;gap:32px;margin-top:32px;">
-              <!-- Shopify -->
-              <div class="section-card" style="margin:0;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(180deg, var(--bg-surface) 0%, rgba(255,255,255,0.02) 100%);border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.15);">
-                <div class="section-card-header" style="display:flex;align-items:center;gap:16px;padding:24px 32px;border-bottom:1px solid rgba(255,255,255,0.05);">
-                  <div style="width:48px;height:48px;border-radius:14px;background:rgba(150,191,72,0.1);color:#96bf48;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(150,191,72,0.2);">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+
+            <!-- Store Data Sources -->
+            <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+              <div class="section-card" style="margin:0;border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:12px;padding:16px 20px;">
+                  <div style="width:40px;height:40px;border-radius:10px;background:rgba(150,191,72,0.1);color:#96bf48;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
                   </div>
-                  <div>
-                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">Shopify</h3>
-                    <div style="font-size:0.85rem;color:var(--text-secondary);">Storefront API</div>
-                  </div>
+                  <div style="flex:1;"><div style="font-weight:600;font-size:0.9rem;">Shopify</div><div style="font-size:0.75rem;color:var(--text-muted);">Storefront API</div></div>
                 </div>
-                <div class="section-card-body settings-form" style="padding:32px;">
-                  <div class="form-row" style="margin-bottom:24px;">
-                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Shop Domain</label>
-                    <input type="text" id="integShopifyDomain" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="e.g. my-store.myshopify.com">
-                  </div>
-                  <div class="form-row" style="margin-bottom:0;">
-                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Storefront Access Token</label>
-                    <input type="text" id="integShopifyToken" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="e.g. shpat_...">
-                  </div>
+                <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
+                  <div><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px;color:var(--text-secondary);">Shop Domain</label><input type="text" id="integShopifyDomain" class="form-input" style="width:100%;padding:10px 12px;font-size:0.82rem;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;" placeholder="my-store.myshopify.com"></div>
+                  <div><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px;color:var(--text-secondary);">Storefront Access Token</label><input type="password" id="integShopifyToken" class="form-input" style="width:100%;padding:10px 12px;font-size:0.82rem;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;" placeholder="shpat_..."></div>
                 </div>
               </div>
-              <!-- WooCommerce -->
-              <div class="section-card" style="margin:0;border:1px solid rgba(255,255,255,0.1);background:linear-gradient(180deg, var(--bg-surface) 0%, rgba(255,255,255,0.02) 100%);border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.15);">
-                <div class="section-card-header" style="display:flex;align-items:center;gap:16px;padding:24px 32px;border-bottom:1px solid rgba(255,255,255,0.05);">
-                  <div style="width:48px;height:48px;border-radius:14px;background:rgba(150,88,138,0.1);color:#96588a;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px rgba(150,88,138,0.2);">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.9V17L12 22l-9-4.9V7z"></path></svg>
+              <div class="section-card" style="margin:0;border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+                <div class="section-card-header" style="display:flex;align-items:center;gap:12px;padding:16px 20px;">
+                  <div style="width:40px;height:40px;border-radius:10px;background:rgba(150,88,138,0.1);color:#96588a;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.9V17L12 22l-9-4.9V7z"></path></svg>
                   </div>
-                  <div>
-                    <h3 style="font-size:1.2rem;font-weight:700;margin:0 0 4px;">WooCommerce</h3>
-                    <div style="font-size:0.85rem;color:var(--text-secondary);">REST API V3</div>
-                  </div>
+                  <div style="flex:1;"><div style="font-weight:600;font-size:0.9rem;">WooCommerce</div><div style="font-size:0.75rem;color:var(--text-muted);">REST API V3</div></div>
                 </div>
-                <div class="section-card-body settings-form" style="padding:32px;">
-                  <div class="form-row" style="margin-bottom:24px;">
-                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Store URL</label>
-                    <input type="text" id="integWooUrl" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="e.g. https://my-store.com">
-                  </div>
-                  <div class="form-row" style="margin-bottom:24px;">
-                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Consumer Key</label>
-                    <input type="text" id="integWooKey" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="ck_...">
-                  </div>
-                  <div class="form-row" style="margin-bottom:0;">
-                    <label style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text);display:block;">Consumer Secret</label>
-                    <input type="text" id="integWooSecret" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;" placeholder="cs_...">
-                  </div>
+                <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
+                  <div><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px;color:var(--text-secondary);">Store URL</label><input type="text" id="integWooUrl" class="form-input" style="width:100%;padding:10px 12px;font-size:0.82rem;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;" placeholder="https://my-store.com"></div>
+                  <div><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px;color:var(--text-secondary);">Consumer Key</label><input type="text" id="integWooKey" class="form-input" style="width:100%;padding:10px 12px;font-size:0.82rem;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;" placeholder="ck_..."></div>
+                  <div><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px;color:var(--text-secondary);">Consumer Secret</label><input type="password" id="integWooSecret" class="form-input" style="width:100%;padding:10px 12px;font-size:0.82rem;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;" placeholder="cs_..."></div>
                 </div>
               </div>
+            </div>
+
+            <!-- SDK Marketplace -->
+            <div style="margin-top:36px;padding-top:28px;border-top:1px solid var(--border);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <div>
+                  <h3 style="font-size:1rem;font-weight:700;margin:0 0 4px;">SDK Plugins &amp; Services</h3>
+                  <p style="font-size:0.82rem;color:var(--text-secondary);margin:0;">Enable third-party SDKs for payments, logistics, analytics, and customer support.</p>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;margin-bottom:20px;">
+                <div style="position:relative;flex:1;">
+                  <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-muted);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="sdkSearchInput" type="text" class="form-input" style="width:100%;padding:10px 12px 10px 38px;font-size:0.85rem;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);" placeholder="Search SDKs by name or category...">
+                </div>
+                <select id="sdkCategoryFilter" class="form-input" style="width:auto;min-width:130px;padding:10px 32px 10px 14px;font-size:0.85rem;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);appearance:none;-webkit-appearance:none;cursor:pointer;">
+                  <option value="all">All Categories</option>
+                  <option value="Payments">Payments</option>
+                  <option value="Logistics">Logistics</option>
+                  <option value="Analytics">Analytics</option>
+                  <option value="Support">Support</option>
+                </select>
+              </div>
+              <div id="sdkMarketplaceGrid"></div>
             </div>
           </div>
 
-          <!-- Extensions -->
-          <div class="app-view" data-appview="extensions">
-            <div class="app-view-header">
-              <h2>Extensions Marketplace</h2>
-            </div>
-            <div class="overview-grid" style="grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:24px;">
-              <div class="section-card" style="margin-top:0;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
-                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
-                <div class="section-card-body" style="padding:28px 24px;">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
-                    <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:#fbbf24;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M11.6 1.1L3.9 14.3H10L9.4 22.9L19.3 9.4H12.9L14.7 1.1H11.6Z"/></svg>
-                    </div>
-                    <span style="font-size:0.7rem;font-weight:700;padding:4px 10px;border-radius:6px;background:rgba(245,158,11,0.15);color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em;border:1px solid rgba(245,158,11,0.2);">Installed</span>
-                  </div>
-                  <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">Firebase</h4>
-                  <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Add powerful backend services including Authentication, Firestore Database, and Cloud Storage.</p>
-                  <button class="btn btn-sm btn-outline" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;border-color:var(--border);">Configure Plugin</button>
-                </div>
-              </div>
-              
-              <div class="section-card" style="margin-top:0;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
-                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
-                <div class="section-card-body" style="padding:28px 24px;">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
-                    <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:var(--primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
-                    </div>
-                  </div>
-                  <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">Stripe Payments</h4>
-                  <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Accept credit cards, Apple Pay, and Google Pay directly inside your app securely.</p>
-                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:var(--primary);color:#fff;border:none;box-shadow:0 4px 12px rgba(99,102,241,0.3);">Install Extension</button>
-                </div>
-              </div>
+          <!-- SDK Config Modal -->
+          <div id="sdkConfigModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:10000;"></div>
 
-              <div class="section-card" style="margin-top:0;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--bg-surface);border-radius:16px;">
-                <div style="position:absolute;top:0;left:0;right:0;height:4px;background:var(--bg-surface);"></div>
-                <div class="section-card-body" style="padding:28px 24px;">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
-                    <div style="width:56px;height:56px;border-radius:16px;background:var(--bg-surface);color:#34d399;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 1px var(--border);">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="6" x2="6" y2="20"></line></svg>
-                    </div>
-                  </div>
-                  <h4 style="margin:0 0 10px;font-size:1.2rem;font-weight:700;letter-spacing:-0.01em;">PostHog Analytics</h4>
-                  <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 24px;line-height:1.5;">Track user behavior, measure feature engagement, and analyze conversion funnels.</p>
-                  <button class="btn btn-sm btn-primary" style="width:100%;padding:12px;border-radius:10px;font-weight:600;font-size:0.9rem;background:#10b981;color:#fff;border:none;box-shadow:0 4px 12px rgba(16,185,129,0.3);">Install Extension</button>
-                </div>
+          <!-- Extensions -->
+          <!-- Analytics -->
+          <div class="app-view" data-appview="analytics">
+            <div class="app-view-header">
+              <h2>Analytics <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted)">— Usage, crashes &amp; engagement</span></h2>
+              <div style="display:flex;gap:8px">
+                <span id="analyticsLastUpdated" style="font-size:0.75rem;color:var(--text-muted);display:flex;align-items:center;"></span>
               </div>
+            </div>
+            <div id="analyticsDashboard">
+              <div class="loading"><span class="spinner"></span> Loading analytics...</div>
             </div>
           </div>
 
@@ -1197,9 +1681,10 @@
           <div class="app-view" data-appview="themes">
             <div class="app-view-header">
               <h2>Appearance &amp; Themes</h2>
-              <button class="btn btn-sm btn-success" style="padding:8px 20px;border-radius:6px;font-weight:600;" onclick="saveThemeSettings()">Save Theme</button>
+              <button type="submit" form="themeForm" class="btn btn-sm btn-success" style="padding:8px 20px;border-radius:6px;font-weight:600;">Save Theme</button>
             </div>
             <div class="section-card" style="margin-top:0;border:1px solid var(--border);background:var(--bg-surface);border-radius:20px;overflow:hidden;">
+              <form id="themeForm" hx-put="/hx/apps/{{app_id}}/theme" hx-target="#theme-save-result" hx-swap="outerHTML">
               <div class="section-card-body settings-form" style="padding:40px;display:flex;gap:60px;">
                 <div style="flex:1;">
                   <h3 style="margin:0 0 32px;font-size:1.2rem;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:16px;letter-spacing:-0.01em;">Global Branding</h3>
@@ -1207,14 +1692,14 @@
                     <label style="font-size:0.85rem;font-weight:600;margin-bottom:12px;">Primary Brand Color</label>
                     <div style="display:flex;gap:16px;align-items:center;">
                       <div style="width:56px;height:56px;border-radius:12px;overflow:hidden;border:2px solid var(--border);padding:3px;background:var(--bg-hover);position:relative;">
-                        <input type="color" id="themePrimaryColor" value="#6366f1" style="position:absolute;top:-10px;left:-10px;width:100px;height:100px;border:none;cursor:pointer;" onchange="updateThemePreview()">
+                        <input type="color" name="primary_color" id="themePrimaryColor" value="#6366f1" style="position:absolute;top:-10px;left:-10px;width:100px;height:100px;border:none;cursor:pointer;" onchange="updateThemePreview()">
                       </div>
                       <input type="text" id="themePrimaryColorHex" class="form-input" style="flex:1;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:monospace;font-size:1rem;" value="#6366f1" onchange="updateThemePreview(true)">
                     </div>
                   </div>
                   <div class="form-row" style="margin-top:32px;">
                     <label style="font-size:0.85rem;font-weight:600;margin-bottom:12px;">Typography / Font Family</label>
-                    <select id="themeFontFamily" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:0.95rem;cursor:pointer;appearance:none;" onchange="updateThemePreview()">
+                    <select name="font_family" id="themeFontFamily" class="form-input" style="width:100%;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:0.95rem;cursor:pointer;appearance:none;" onchange="updateThemePreview()">
                       <option value="system">System Default (San Francisco / Roboto)</option>
                       <option value="Inter">Inter</option>
                       <option value="Poppins">Poppins</option>
@@ -1225,7 +1710,7 @@
                   <div class="form-row" style="margin-top:32px;">
                     <label style="font-size:0.85rem;font-weight:600;margin-bottom:12px;">Border Radius (Buttons &amp; Cards)</label>
                     <div style="display:flex;align-items:center;gap:20px;">
-                      <input type="range" id="themeBorderRadius" min="0" max="24" value="8" style="flex:1;accent-color:var(--primary);cursor:pointer;height:6px;background:var(--border);border-radius:3px;appearance:none;" oninput="updateThemePreview()">
+                      <input type="range" name="border_radius" id="themeBorderRadius" min="0" max="24" value="8" style="flex:1;accent-color:var(--primary);cursor:pointer;height:6px;background:var(--border);border-radius:3px;appearance:none;" oninput="updateThemePreview()">
                       <span id="themeBorderRadiusVal" style="font-family:monospace;font-size:0.95rem;font-weight:600;color:var(--primary);background:rgba(99,102,241,0.1);padding:4px 10px;border-radius:6px;border:1px solid rgba(99,102,241,0.2);">8px</span>
                     </div>
                   </div>
@@ -1269,9 +1754,75 @@
                   </div>
                 </div>
               </div>
+              </form>
+              <div id="theme-save-result"></div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Template Browser Modal -->
+  <div id="templateBrowserModal" class="modal-overlay hidden" onclick="if(event.target===this)closeTemplateBrowser()">
+    <div class="template-browser-panel">
+      <div class="template-browser-header">
+        <div>
+          <h3>Template Library</h3>
+          <p>Choose a pre-built screen layout to jumpstart your app design</p>
+        </div>
+        <button class="template-browser-close" onclick="closeTemplateBrowser()">&times;</button>
+      </div>
+      <div class="template-browser-categories" id="templateCategoryTabs"></div>
+      <div class="template-browser-body">
+        <div class="template-browser-grid" id="templateBrowserGrid"></div>
+      </div>
+      <div class="template-browser-footer">
+        <button class="btn btn-sm btn-secondary" onclick="closeTemplateBrowser()">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="applyTemplateBtn" onclick="applySelectedTemplate()" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Apply Template
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Generation Modal -->
+  <div id="aiGeneratorModal" class="modal-overlay hidden" onclick="if(event.target===this)closeAIGenerator()">
+    <div class="ai-gen-panel">
+      <div class="ai-gen-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="ai-gen-header-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </div>
+          <div>
+            <h3>AI Page Generator</h3>
+            <p>Describe what you want and let AI generate the pages</p>
+          </div>
+        </div>
+        <button class="ai-gen-close" onclick="closeAIGenerator()">&times;</button>
+      </div>
+      <div class="ai-gen-body">
+        <div class="ai-gen-input-wrap">
+          <textarea id="aiPromptInput" class="ai-gen-textarea" placeholder="Describe your app pages...&#10;&#10;Example: &quot;Create a coffee shop app with a menu page showing drinks and pastries, an order form page, and a location page with address and hours&quot;" rows="4"></textarea>
+<div class="ai-gen-hints">
+            <span>Quick ideas:</span>
+            <button class="ai-gen-hint-btn" onclick="setAIPrompt('A shopping app with product listing, cart, and checkout')">Shopping app</button>
+            <button class="ai-gen-hint-btn" onclick="setAIPrompt('A restaurant app with menu, reservations, and location')">Restaurant</button>
+            <button class="ai-gen-hint-btn" onclick="setAIPrompt('A fitness app with workout plans and progress tracking')">Fitness app</button>
+            <button class="ai-gen-hint-btn" onclick="setAIPrompt('A business landing page with services and contact form')">Business site</button>
+            <button class="ai-gen-hint-btn" onclick="setAIPrompt('A social media feed with user profiles, posts, and notifications')">Social app</button>
+          </div>
+          <div style="margin-top:8px;font-size:0.72rem;color:var(--text-muted);">AI-powered by GPT-4o-mini &mdash; set <code style="background:var(--bg-hover);padding:1px 5px;border-radius:3px;font-size:0.7rem;">OPENAI_API_KEY</code> env var</div>
+        </div>
+        <div id="aiGenResult" style="display:none;"></div>
+      </div>
+      <div class="ai-gen-footer">
+        <button class="btn btn-sm btn-secondary" onclick="closeAIGenerator()">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="aiGenerateBtn" onclick="runAIGeneration()" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          Generate
+        </button>
       </div>
     </div>
   </div>
@@ -1301,7 +1852,7 @@
           <input type="text" id="editVersion" class="form-input">
         </div>
         <div class="form-row" style="margin-bottom:0">
-          <button class="btn btn-primary" onclick="saveAppSettings()" style="width:100%">Save Changes</button>
+          <button class="btn btn-primary" id="saveSettingsBtn" onclick="saveAppSettings()" data-loading-text="Saving..." style="width:100%">Save Changes</button>
         </div>
       </div>
     </div>
@@ -1402,12 +1953,138 @@
     </div>
   </div>
 
+  <!-- Floating AI Chat Overlay -->
+  <div class="fab-chat-overlay" id="fabChatOverlay" style="display:none;">
+    <div class="fab-chat-panel" id="fabChatPanel">
+      <div class="fab-chat-header">
+        <div class="fab-chat-avatar">
+          <span>AI</span>
+          <span class="fab-chat-avatar-dot"></span>
+        </div>
+        <div class="fab-chat-header-info">
+          <div class="fab-chat-header-name">App Builder Agent</div>
+          <div class="fab-chat-header-status"><span class="status-dot"></span> Ready</div>
+        </div>
+        <select id="fabChatModel" style="margin-left:auto;margin-right:6px;padding:2px 6px;font-size:0.68rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);cursor:pointer;outline:none;max-width:110px;">
+          <optgroup label="OpenAI (paid)">
+            <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          </optgroup>
+          <optgroup label="Groq (free)">
+            <option value="groq/llama-3.1-8b-instant">Llama 3.1 8B</option>
+            <option value="groq/llama-3.2-3b-preview">Llama 3.2 3B</option>
+            <option value="groq/mixtral-8x7b-32768">Mixtral 8x7B</option>
+            <option value="groq/llama-3.3-70b-versatile">Llama 3.3 70B</option>
+          </optgroup>
+          <optgroup label="Gemini (free tier)">
+            <option value="gemini/gemini-3.5-flash" selected>Gemini 3.5 Flash</option>
+            <option value="gemini/gemini-2.5-pro">Gemini 2.5 Pro</option>
+          </optgroup>
+          <optgroup label="OpenRouter (varies)">
+            <option value="openrouter/meta-llama/llama-3.2-3b-instruct">Llama 3.2 3B</option>
+            <option value="openrouter/mistralai/mixtral-8x22b-instruct">Mixtral 8x22B</option>
+          </optgroup>
+          <optgroup label="Ollama (local)">
+            <option value="ollama/llama3.2">Llama 3.2</option>
+            <option value="ollama/mistral">Mistral</option>
+            <option value="ollama/phi3">Phi-3</option>
+          </optgroup>
+        </select>
+        <button class="fab-chat-icon-btn" onclick="showAiSettings()" title="AI Provider Settings" style="margin-right:2px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="fab-chat-icon-btn" onclick="dBToggleChat()" title="Close">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="fabChatProviderStatus" style="display:flex;align-items:center;gap:4px;padding:4px 14px;border-bottom:1px solid var(--border);font-size:0.65rem;flex-wrap:wrap;"></div>
+      <div class="fab-chat-messages" id="fabChatMessages">
+        <div class="msg-row ai-row">
+          <div class="msg-avatar ai-avatar">AI</div>
+          <div class="msg-bubble">
+            <div class="msg-content">Hey! I'm your app-building agent. I can create pages, add components, tweak your theme, and more.<br><br>Try: <strong>"Add a login page"</strong> or <strong>"Change the primary color to teal"</strong>.</div>
+          </div>
+        </div>
+      </div>
+      <div class="fab-chat-error" id="fabChatError"></div>
+      <div class="fab-quick-actions" id="fabQuickActions">
+        <button class="fab-quick-action" onclick="dBSendQuick('Add a login page')">+ Login Page</button>
+        <button class="fab-quick-action" onclick="dBSendQuick('Add a profile page')">+ Profile</button>
+        <button class="fab-quick-action" onclick="dBSendQuick('Add bottom navigation with 3 tabs')">+ Bottom Tabs</button>
+        <button class="fab-quick-action" onclick="dBSendQuick('Change theme to dark blue')">Dark Blue</button>
+      </div>
+      <div class="fab-chat-input-wrap">
+        <textarea class="fab-chat-input" id="fabChatInput" placeholder="Tell me what to build..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();dBSendChat()}"></textarea>
+        <button class="fab-chat-send" id="fabChatSendBtn" onclick="dBSendChat()" title="Send">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Provider Settings Modal -->
+  <div id="aiSettingsOverlay" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:11000;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
+    <div style="background:var(--bg-card);border-radius:var(--radius);width:420px;max-width:90vw;box-shadow:0 12px 40px rgba(0,0,0,0.2);overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);">
+        <h3 style="margin:0;font-size:0.95rem;font-weight:600;">AI Provider Settings</h3>
+        <button onclick="closeAiSettings()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:4px;border-radius:6px;display:flex;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">OpenAI <span style="color:var(--text-muted);font-weight:400;">(OPENAI_API_KEY)</span></label>
+          <input id="aiKeyOpenai" type="password" placeholder="sk-..." style="width:100%;padding:8px 10px;font-size:0.8rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);color:var(--text);outline:none;box-sizing:border-box;" onfocus="this.type='text'" onblur="this.type='password'">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Groq — Free <span style="color:var(--text-muted);font-weight:400;">(GROQ_API_KEY)</span></label>
+          <input id="aiKeyGroq" type="password" placeholder="gsk_..." style="width:100%;padding:8px 10px;font-size:0.8rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);color:var(--text);outline:none;box-sizing:border-box;" onfocus="this.type='text'" onblur="this.type='password'">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Google Gemini — Free tier <span style="color:var(--text-muted);font-weight:400;">(GEMINI_API_KEY)</span></label>
+          <input id="aiKeyGemini" type="password" placeholder="AIza..." style="width:100%;padding:8px 10px;font-size:0.8rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);color:var(--text);outline:none;box-sizing:border-box;" onfocus="this.type='text'" onblur="this.type='password'">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">OpenRouter <span style="color:var(--text-muted);font-weight:400;">(OPENROUTER_API_KEY)</span></label>
+          <input id="aiKeyOpenrouter" type="password" placeholder="sk-or-..." style="width:100%;padding:8px 10px;font-size:0.8rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);color:var(--text);outline:none;box-sizing:border-box;" onfocus="this.type='text'" onblur="this.type='password'">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">Ollama — Free (local) <span style="color:var(--text-muted);font-weight:400;">(OLLAMA_HOST)</span></label>
+          <input id="aiKeyOllama" type="text" placeholder="http://localhost:11434" value="http://localhost:11434" style="width:100%;padding:8px 10px;font-size:0.8rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);color:var(--text);outline:none;box-sizing:border-box;">
+        </div>
+        <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;padding:8px 10px;background:var(--bg-surface);border-radius:8px;border:1px solid var(--border);">
+          Keys are saved locally in your browser and sent securely to the server with each request. They are never stored permanently.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border);background:var(--bg-surface);">
+        <button class="btn btn-sm btn-secondary" onclick="closeAiSettings()">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="saveAiSettings()">Save Keys</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Action Button -->
+  <button class="fab-btn" id="fabChatBtn" onclick="dBToggleChat()" title="AI Agent">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/></svg>
+  </button>
+
   <div id="toastContainer" class="toast-container"></div>
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script>
+    document.addEventListener('htmx:configRequest', function(evt) {
+      if (typeof token !== 'undefined' && token) {
+        evt.detail.headers['Authorization'] = 'Bearer ' + token;
+      }
+    });
+  </script>
   <!-- Google Firebase Compat Web SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-  <script src="app-dashboard.js?v=1.1"></script>
+  <script src="/templates.js"></script>
+  <script src="/app-dashboard.js?v=1.1"></script>
 </body>
 </html>

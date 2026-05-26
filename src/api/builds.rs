@@ -14,7 +14,13 @@ pub async fn build_app(
     body: web::Json<BuildRequest>,
     tracker: web::Data<BuildTracker>,
 ) -> HttpResponse {
-    let user_id = auth::extract_user_id(&req).unwrap_or_else(|| "anonymous".to_string());
+    let user_id = match auth::extract_user_id(&req) {
+        Some(uid) => uid,
+        None => return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "auth_required",
+            "message": "Please sign in to build your app. Anonymous builds are not supported."
+        })),
+    };
     let app_id = path.into_inner();
     let platform = body.platform.clone();
     let now = Utc::now().to_rfc3339();
@@ -25,6 +31,16 @@ pub async fn build_app(
             let app_name = app["app_name"].as_str().unwrap_or("app");
             let config = app["config"].clone();
             let project_config = config.get("project_config").cloned().unwrap_or_else(|| serde_json::json!({}));
+            // Merge third-party integrations from app_settings into project_config
+            let mut project_config_with_integrations = project_config.clone();
+            if let Some(settings) = db.list_settings(&app_id).ok() {
+                if let Some(integ_setting) = settings.iter().find(|s| s.get("key").and_then(|v| v.as_str()) == Some("third_party_integrations")) {
+                    if let Some(obj) = project_config_with_integrations.as_object_mut() {
+                        let integ_value = integ_setting.get("value").cloned().unwrap_or_default();
+                        obj.insert("_integrations".to_string(), integ_value);
+                    }
+                }
+            }
             let package_name = config.get("package_name").and_then(|v| v.as_str()).unwrap_or("com.example.app");
             let display_name = config.get("display_name").and_then(|v| v.as_str()).unwrap_or(app_name);
             let version = config.get("version").and_then(|v| v.as_str()).unwrap_or("1.0.0");
@@ -33,7 +49,7 @@ pub async fn build_app(
             let _ = crate::services::app_generator::AppGenerator::generate_from_template(
                 &app_id,
                 app_name,
-                &project_config,
+                &project_config_with_integrations,
                 package_name,
                 display_name,
                 version,
@@ -92,7 +108,13 @@ pub async fn get_build_status(
     }
 }
 
-pub async fn download_build(path: web::Path<String>) -> HttpResponse {
+pub async fn download_build(req: HttpRequest, path: web::Path<String>) -> HttpResponse {
+    if auth::extract_user_id(&req).is_none() {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "auth_required",
+            "message": "Please sign in to download builds."
+        }));
+    }
     let build_id = path.into_inner();
     let files = match std::fs::read_dir("./output") {
         Ok(f) => f,

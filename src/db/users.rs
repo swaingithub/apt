@@ -35,4 +35,28 @@ impl Database {
             None => Ok(None),
         }
     }
+
+    pub fn update_user(&self, id: &str, email: &str, name: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE users SET email = ?1, name = ?2 WHERE id = ?3",
+            params![email, name, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_password(&self, id: &str, hash: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE users SET password_hash = ?1 WHERE id = ?2",
+            params![hash, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_user(&self, id: &str) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM users WHERE id = ?1", params![id])?;
+        Ok(())
+    }
 }

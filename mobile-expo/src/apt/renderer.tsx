@@ -26,9 +26,25 @@ function toIcon(name?: string) {
   const map: Record<string, any> = {
     BellRing: 'notifications', CloudUpload: 'cloud-upload', UserRound: 'person-circle',
     Heart: 'heart', Home: 'home', Package: 'cube', Smartphone: 'phone-portrait',
+    ShoppingCart: 'cart', Cart: 'cart', Bag: 'bag', BagHandle: 'bag-handle',
   };
   return map[name || ''] || 'apps';
 }
+
+interface ProductCard {
+  id: string;
+  title: string;
+  price: string;
+  image?: string;
+}
+
+// Mock product data for demo/preview when no real API is connected
+const MOCK_PRODUCTS: ProductCard[] = [
+  { id: 'p1', title: 'Running Shoes', price: '$89.99', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400' },
+  { id: 'p2', title: 'Wireless Headphones', price: '$149.99', image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400' },
+  { id: 'p3', title: 'Leather Backpack', price: '$69.99', image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400' },
+  { id: 'p4', title: 'Smart Watch', price: '$199.99', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400' },
+];
 
 export interface RenderCtx {
   stateValues: Record<string, any>;
@@ -169,6 +185,55 @@ export function renderElement(el: AppElement, ctx: RenderCtx): React.JSX.Element
     return <View key={el.id} style={[styles.divider, s]} />;
   }
 
+  // ── E-Commerce Blocks ──
+
+  if (el.type === 'shopify_grid' || el.type === 'woo_grid') {
+    const layout = el.properties.layout || 'grid';
+    const products = MOCK_PRODUCTS;
+    if (layout === 'list') {
+      return (
+        <View key={el.id} style={[s, { gap: 12 }]}>
+          {products.map((product) => (
+            <Pressable key={product.id} style={styles.productRow} onPress={() => ctx.onAction(el.actions.onClick)}>
+              <Image source={{ uri: product.image }} style={styles.productThumb} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.productTitle}>{product.title}</Text>
+                <Text style={styles.productPrice}>{product.price}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      );
+    }
+    return (
+      <View key={el.id} style={[styles.productGrid, s]}>
+        {products.map((product) => (
+          <Pressable key={product.id} style={styles.productCard} onPress={() => ctx.onAction(el.actions.onClick)}>
+            <Image source={{ uri: product.image }} style={styles.productImage} />
+            <View style={{ padding: 8 }}>
+              <Text style={styles.productTitle} numberOfLines={1}>{product.title}</Text>
+              <Text style={styles.productPrice}>{product.price}</Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
+
+  if (el.type === 'cart_button') {
+    const badgeColor = el.properties.badgeColor || '#ef4444';
+    return (
+      <Pressable key={el.id} style={[s, { alignSelf: 'flex-end' }]} onPress={() => ctx.onAction(el.actions.onClick)}>
+        <View>
+          <Ionicons name="cart" size={el.properties.iconSize || 26} color={s.color || ctx.theme.textColor} />
+          <View style={[styles.cartBadge, { backgroundColor: badgeColor }]}>
+            <Text style={styles.cartBadgeText}>0</Text>
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
+
   return (
     <View key={el.id} style={[styles.unsupported, s]}>
       <Text style={styles.mutedText}>{el.type} block is web-only for now.</Text>
@@ -198,4 +263,14 @@ const styles = StyleSheet.create({
   deleteText: { color: '#ef4444', fontWeight: '800' },
   divider: { backgroundColor: '#cbd5e1', height: 1, marginVertical: 12 },
   unsupported: { borderColor: '#cbd5e1', borderRadius: 12, borderStyle: 'dashed', borderWidth: 1, padding: 14 },
+  // E-Commerce
+  productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  productCard: { backgroundColor: '#ffffff', borderRadius: 12, overflow: 'hidden', width: '47%' },
+  productImage: { height: 150, width: '100%' },
+  productTitle: { color: '#0f172a', fontSize: 13, fontWeight: '700' },
+  productPrice: { color: '#6366f1', fontSize: 14, fontWeight: '800', marginTop: 3 },
+  productRow: { alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, flexDirection: 'row', gap: 12, padding: 10 },
+  productThumb: { borderRadius: 8, height: 60, width: 60 },
+  cartBadge: { alignItems: 'center', borderRadius: 10, height: 18, justifyContent: 'center', minWidth: 18, position: 'absolute', right: -6, top: -6 },
+  cartBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
 });

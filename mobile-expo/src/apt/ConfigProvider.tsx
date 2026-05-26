@@ -18,6 +18,12 @@ export interface RuntimeConfig {
   settings: Record<string, any>;
   pages: Record<string, { attributes: Record<string, any>; blocks: any[] }>;
   navigation: { bottomTabs: any[] };
+  routing: {
+    scheme: string;
+    host: string;
+    prefix: string;
+    pages: Array<{ page_id: string; path: string; params: string[] }>;
+  };
   theme: {
     mode?: string;
     primaryColor?: string;
@@ -107,6 +113,56 @@ export function ConfigProvider({
     fetchConfig();
   }, [slug]);
 
+  // Live preview: connect to WebSocket and refresh on config_updated
+  useEffect(() => {
+    if (!apiBase || !slug) return;
+
+    const wsUrl = apiBase
+      .replace(/^http:/, 'ws:')
+      .replace(/^https:/, 'wss:')
+      .replace(/\/+$/, '') + '/ws/preview/' + encodeURIComponent(slug);
+
+    let ws: WebSocket;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let disposed = false;
+
+    function connect() {
+      if (disposed) return;
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => console.log('[Preview WS] Connected');
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'config_updated') {
+              console.log('[Preview WS] Config updated, refreshing...');
+              fetchConfig();
+            }
+          } catch { /* ignore parse errors */ }
+        };
+        ws.onclose = () => {
+          if (!disposed) {
+            reconnectTimer = setTimeout(connect, 3000);
+          }
+        };
+        ws.onerror = () => ws.close();
+      } catch (e) {
+        console.warn('[Preview WS] Connection failed:', e);
+      }
+    }
+
+    connect();
+
+    return () => {
+      disposed = true;
+      clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, [apiBase, slug, fetchConfig]);
+
   return (
     <ConfigContext.Provider value={{ config, isLoading, error, refresh: fetchConfig }}>
       {children}
@@ -124,6 +180,7 @@ export function useConfig() {
     settings: ctx.config?.settings || {},
     pages: ctx.config?.pages || {},
     navigation: ctx.config?.navigation || { bottomTabs: [] },
+    routing: ctx.config?.routing || { scheme: '', host: '', prefix: '/', pages: [] },
     theme: ctx.config?.theme || {},
     version: ctx.config?.version,
   };

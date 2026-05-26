@@ -1,12 +1,17 @@
+mod agent;
+mod ai;
+mod analytics;
 mod apps;
 mod blocks;
 mod builds;
 mod config;
 mod generate;
 mod health;
+mod htmx;
 mod media;
 mod navigation;
 mod pages;
+mod preview;
 mod projects;
 mod publish;
 mod push;
@@ -15,11 +20,16 @@ mod settings;
 
 use health::health_check;
 use generate::generate_from_template;
+use htmx::htmx_routes;
+use preview::preview_ws;
 use apps::{create_app, download_source, list_apps, get_app, update_app, delete_app, list_app_builds, get_app_products};
 use builds::{build_app, get_build_status, download_build};
 use qr::get_qr_code;
 use projects::{create_project, list_projects, get_project, update_project, delete_project, export_project};
 use push::send_push_notification;
+use agent::agent_chat;
+use ai::{generate_from_prompt, get_ai_providers};
+use analytics::get_analytics;
 use config::get_config;
 use settings::{list_settings, upsert_setting, delete_setting};
 use pages::{list_pages, create_page, update_page, delete_page};
@@ -112,6 +122,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .route("/api/health", web::get().to(health_check))
         .route("/api/auth/register", web::post().to(root_auth::register))
         .route("/api/auth/login", web::post().to(root_auth::login))
+        .route("/api/auth/profile", web::put().to(root_auth::put_profile))
+        .route("/api/auth/password", web::put().to(root_auth::put_password))
+        .route("/api/auth/account", web::delete().to(root_auth::delete_account))
         .route("/api/auth/me", web::get().to(root_auth::me))
         .route("/api/auth/firebase-sync", web::post().to(root_auth::firebase_sync))
         .route("/api/generate", web::post().to(generate_from_template))
@@ -159,5 +172,11 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 
         .route("/api/v1/apps/{app_id}/media", web::get().to(list_media))
         .route("/api/v1/apps/{app_id}/media", web::post().to(create_media))
-        .route("/api/v1/apps/{app_id}/media/{media_id}", web::delete().to(delete_media));
+        .route("/api/v1/apps/{app_id}/media/{media_id}", web::delete().to(delete_media))
+        .route("/api/v1/apps/{app_id}/analytics", web::get().to(get_analytics))
+        .route("/api/v1/apps/{app_id}/generate", web::post().to(generate_from_prompt))
+        .route("/api/v1/apps/{app_id}/agent/chat", web::post().to(agent_chat))
+        .route("/api/v1/ai/providers", web::get().to(get_ai_providers))
+        .route("/ws/preview/{app_id}", web::get().to(preview_ws))
+        .configure(htmx_routes);
 }

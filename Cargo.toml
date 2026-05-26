@@ -30,6 +30,8 @@ bcrypt = "0.16"
 rand = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
 regex = "1"
+actix-ws = "0.3"
+futures-util = "0.3"
 
 [[bin]]
 name = "apt"

@@ -1,5 +1,6 @@
 use anyhow::Result;
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -8,8 +9,6 @@ use zip::{write::FileOptions, ZipWriter};
 pub struct AppGenerator;
 
 impl AppGenerator {
-    /// Generate an Expo project from mobile-expo/ template,
-    /// inject the user's ProjectConfig, and return the zip path.
     pub fn generate_from_template(
         app_id: &str,
         app_name: &str,
@@ -29,28 +28,186 @@ impl AppGenerator {
 
         Self::copy_template(&template_path, &output_path)?;
 
-        // Remove node_modules if present in template
         let nm = output_path.join("node_modules");
         if nm.exists() {
             fs::remove_dir_all(&nm)?;
         }
 
-        // Write project config as TypeScript (the only file that changes per user)
+        // Write project config
         let config_ts = Self::render_project_config(project_config);
         fs::write(output_path.join("src").join("theme").join("config.ts"), config_ts)?;
 
-        // Update app.json with user metadata
+        // Generate integrations.ts from third-party SDK config
+        let integrations_ts = Self::render_integrations(project_config);
+        fs::write(output_path.join("src").join("apt").join("integrations.ts"), integrations_ts)?;
+
         Self::update_app_json(&output_path, display_name, package_name, version, primary_color)?;
 
-        // Update package.json with user app name
-        Self::update_package_json(&output_path, app_name, version)?;
+        // Extract SDK npm packages for package.json injection
+        let sdk_packages = Self::extract_sdk_packages(project_config);
+        Self::update_package_json(&output_path, app_name, version, &sdk_packages)?;
 
-        // Create zip archive (use app_id for unique filename)
         let zip_path = format!("./output/{}_source.zip", app_id);
         fs::create_dir_all("./output")?;
         Self::create_zip(&output_path, &zip_path)?;
 
         Ok(zip_path)
+    }
+
+    fn render_project_config(config: &Value) -> String {
+        let mut augmented = config.clone();
+        // Remove internal keys before writing to config.ts
+        if let Some(obj) = augmented.as_object_mut() {
+            obj.remove("_integrations");
+        }
+        let app_name = config.get("appName").and_then(|v| v.as_str()).unwrap_or("app");
+        let slug = app_name.to_lowercase().replace(" ", "-");
+        if let Some(obj) = augmented.as_object_mut() {
+            let runtime = obj.entry("runtime").or_insert(json!({}));
+            if let Some(rt) = runtime.as_object_mut() {
+                if !rt.contains_key("slug") {
+                    rt.insert("slug".into(), Value::String(slug));
+                }
+                if !rt.contains_key("apiBaseUrl") {
+                    let base_url = std::env::var("APT_API_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".into());
+                    rt.insert("apiBaseUrl".into(), Value::String(base_url));
+                }
+            }
+        }
+        let json = serde_json::to_string_pretty(&augmented).unwrap_or_else(|_| "{}".to_string());
+        format!(
+            "import type {{ ProjectConfig }} from '../apt';\n\
+             \n\
+             const config: ProjectConfig = {};\n\
+             \n\
+             export default config;\n",
+            json
+        )
+    }
+
+    /// Extract enabled third-party SDK configs and generate initialization code
+    fn render_integrations(config: &Value) -> String {
+        let integrations = config.get("_integrations")
+            .and_then(|v| v.as_object())
+            .map(|m| {
+                let mut result = BTreeMap::new();
+                for (key, val) in m {
+                    if let Some(obj) = val.as_object() {
+                        if obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            let cfg = obj.get("config").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+                            let mut clean = BTreeMap::new();
+                            for (k, v) in cfg {
+                                clean.insert(k.clone(), v.as_str().unwrap_or("").to_string());
+                            }
+                            result.insert(key.clone(), clean);
+                        }
+                    }
+                }
+                result
+            })
+            .unwrap_or_default();
+
+        if integrations.is_empty() {
+            return "// No third-party SDK integrations enabled\n".to_string();
+        }
+
+        let mut lines = vec![
+            "// Auto-generated SDK integrations".to_string(),
+            "// This file is regenerated on each build.".to_string(),
+            String::new(),
+            "export const INTEGRATIONS: Record<string, Record<string, string>> = {".to_string(),
+        ];
+
+        let mut sdk_sorted: Vec<&String> = integrations.keys().collect();
+        sdk_sorted.sort();
+        for key in &sdk_sorted {
+            let cfg = &integrations[*key];
+            lines.push(format!("  '{}': {{", key));
+            let mut keys: Vec<&String> = cfg.keys().collect();
+            keys.sort();
+            for k in keys {
+                let v = &cfg[k];
+                lines.push(format!("    '{}': '{}',", k, v));
+            }
+            lines.push("  },".to_string());
+        }
+        lines.push("};".to_string());
+        lines.push(String::new());
+
+        // Generate init calls for each SDK
+        lines.push("export async function initializeIntegrations(): Promise<void> {".to_string());
+        for key in &sdk_sorted {
+            lines.push(format!("  // {} SDK setup", key));
+            lines.push(format!("  if (INTEGRATIONS['{}']) {{", key));
+            lines.push(format!("    const cfg = INTEGRATIONS['{}'];", key));
+            lines.push(format!("    console.log('[Integrations] Initializing {} with', Object.keys(cfg).length, 'config keys');", key));
+            lines.push("  }".to_string());
+        }
+        lines.push("}".to_string());
+        lines.push(String::new());
+        lines.push("export default INTEGRATIONS;".to_string());
+        lines.join("\n")
+    }
+
+    /// Collect npm package names from enabled third-party SDKs
+    fn extract_sdk_packages(config: &Value) -> Vec<String> {
+        let mut packages = Vec::new();
+        // This is a lookup table — kept in sync with THIRD_PARTY_SDKS in the frontend
+        let sdk_npm: Vec<(&str, &str)> = vec![
+            ("gokwik", "gokwik-react-native-sdk"),
+            ("razorpay", "razorpay-react-native"),
+            ("cashfree", "cashfree-pg-react-native-sdk"),
+            ("stripe", "@stripe/stripe-react-native"),
+            ("instamojo", "instamojo-react-native"),
+            ("return_prime", "return-prime-react-native-sdk"),
+            ("shiprocket", "shiprocket-react-native-sdk"),
+            ("delhivery", "delhivery-react-native-sdk"),
+            ("shipway", "shipway-react-native-sdk"),
+            ("mixpanel", "mixpanel-react-native"),
+            ("clevertap", "clevertap-react-native"),
+            ("firebase_analytics", "@react-native-firebase/analytics"),
+            ("intercom", "intercom-react-native"),
+        ];
+
+        if let Some(integrations) = config.get("_integrations").and_then(|v| v.as_object()) {
+            for (key, val) in integrations {
+                let enabled = val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+                if enabled {
+                    if let Some(pkg) = sdk_npm.iter().find(|(k, _)| *k == key).map(|(_, p)| *p) {
+                        if !packages.contains(&pkg.to_string()) {
+                            packages.push(pkg.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        packages
+    }
+
+    fn update_package_json(path: &Path, app_name: &str, version: &str, sdk_packages: &[String]) -> Result<()> {
+        let pkg_path = path.join("package.json");
+        let content = fs::read_to_string(&pkg_path)?;
+        let mut pkg: Value = serde_json::from_str(&content)?;
+
+        if let Some(obj) = pkg.as_object_mut() {
+            obj.insert("name".to_string(), Value::String(app_name.to_string()));
+            obj.insert("version".to_string(), Value::String(version.to_string()));
+
+            // Inject SDK dependencies
+            if !sdk_packages.is_empty() {
+                let deps = obj.entry("dependencies").or_insert(json!({}));
+                if let Some(deps_obj) = deps.as_object_mut() {
+                    for pkg_name in sdk_packages {
+                        if !deps_obj.contains_key(pkg_name) {
+                            deps_obj.insert(pkg_name.clone(), Value::String("*".to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        fs::write(&pkg_path, serde_json::to_string_pretty(&pkg)?)?;
+        Ok(())
     }
 
     fn copy_template(src: &Path, dst: &Path) -> Result<()> {
@@ -74,34 +231,6 @@ impl AppGenerator {
             }
         }
         Ok(())
-    }
-
-    fn render_project_config(config: &Value) -> String {
-        let mut augmented = config.clone();
-        // Inject runtime metadata so the mobile app knows its identity
-        let app_name = config.get("appName").and_then(|v| v.as_str()).unwrap_or("app");
-        let slug = app_name.to_lowercase().replace(" ", "-");
-        if let Some(obj) = augmented.as_object_mut() {
-            let runtime = obj.entry("runtime").or_insert(serde_json::json!({}));
-            if let Some(rt) = runtime.as_object_mut() {
-                if !rt.contains_key("slug") {
-                    rt.insert("slug".into(), Value::String(slug));
-                }
-                if !rt.contains_key("apiBaseUrl") {
-                    let base_url = std::env::var("APT_API_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".into());
-                    rt.insert("apiBaseUrl".into(), Value::String(base_url));
-                }
-            }
-        }
-        let json = serde_json::to_string_pretty(&augmented).unwrap_or_else(|_| "{}".to_string());
-        format!(
-            "import type {{ ProjectConfig }} from '../apt';\n\
-             \n\
-             const config: ProjectConfig = {};\n\
-             \n\
-             export default config;\n",
-            json
-        )
     }
 
     fn update_app_json(
@@ -150,20 +279,6 @@ impl AppGenerator {
         }
 
         fs::write(&app_json_path, serde_json::to_string_pretty(&app)?)?;
-        Ok(())
-    }
-
-    fn update_package_json(path: &Path, app_name: &str, version: &str) -> Result<()> {
-        let pkg_path = path.join("package.json");
-        let content = fs::read_to_string(&pkg_path)?;
-        let mut pkg: Value = serde_json::from_str(&content)?;
-
-        if let Some(obj) = pkg.as_object_mut() {
-            obj.insert("name".to_string(), Value::String(app_name.to_string()));
-            obj.insert("version".to_string(), Value::String(version.to_string()));
-        }
-
-        fs::write(&pkg_path, serde_json::to_string_pretty(&pkg)?)?;
         Ok(())
     }
 

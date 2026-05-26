@@ -89,6 +89,15 @@ pub async fn get_config(
 
     let navigation = nav_data.map(|n| n["config"].clone()).unwrap_or(serde_json::json!([]));
 
+    let routing = settings_map.get("routing")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({
+            "scheme": "",
+            "host": "",
+            "prefix": "/",
+            "pages": [],
+        }));
+
     let project_config = project.get("config").and_then(|c| c.as_object()).cloned().unwrap_or_default();
     let theme = project_config.get("project_config").and_then(|pc| pc.get("theme")).cloned()
         .unwrap_or_else(|| serde_json::json!({
@@ -119,6 +128,7 @@ pub async fn get_config(
         "navigation": {
             "bottomTabs": navigation,
         },
+        "routing": routing,
         "theme": theme,
     });
 

@@ -22,6 +22,12 @@ let pendingConfirm = null;
 
 function getToken() { return localStorage.getItem('apt_token'); }
 function setToken(t) { if (t) localStorage.setItem('apt_token', t); else localStorage.removeItem('apt_token'); }
+function setUserData(u) { if (u) localStorage.setItem('apt_user', JSON.stringify(u)); else localStorage.removeItem('apt_user'); }
+function getDeviceId() {
+    let id = localStorage.getItem('apt_device_id');
+    if (!id) { id = crypto.randomUUID ? crypto.randomUUID() : 'd' + Date.now() + Math.random().toString(36).slice(2); localStorage.setItem('apt_device_id', id); }
+    return id;
+}
 
 function authHeaders() {
     const h = { 'Content-Type': 'application/json' };
@@ -212,8 +218,14 @@ window.switchView = switchView;
 // ── Auth ──
 
 async function checkAuth() {
+    // Pre-fill from cached login data
+    const cached = localStorage.getItem('apt_user');
+    if (cached) {
+        try { currentUser = JSON.parse(cached); renderUser(); } catch (e) {}
+    }
     try {
         currentUser = await api('GET', '/auth/me');
+        setUserData(currentUser);
         renderUser();
     } catch { renderUser(); }
 }
@@ -221,13 +233,16 @@ async function checkAuth() {
 function renderUser() {
     const info = document.getElementById('userInfo');
     const btn = document.getElementById('authBtn');
+    const banner = document.getElementById('anonBanner');
     if (currentUser) {
         info.textContent = currentUser.name || currentUser.email;
         info.classList.remove('hidden');
         btn.textContent = 'Sign Out';
+        if (banner) banner.style.display = 'none';
     } else {
         info.classList.add('hidden');
         btn.textContent = 'Sign In';
+        if (banner) banner.style.display = 'block';
     }
 }
 
@@ -244,6 +259,7 @@ document.getElementById('authBtn').addEventListener('click', () => {
     if (currentUser) {
         try { auth.signOut(); } catch (e) {}
         setToken(null);
+        setUserData(null);
         currentUser = null;
         renderUser();
         toast('Signed out successfully');
@@ -270,7 +286,7 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
         if (isLocalMode) {
             // Local Mode Auth directly against Rust SQLite database!
             const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
-            const payload = authMode === 'login' ? { email, password } : { email, password, name };
+            const payload = authMode === 'login' ? { email, password } : { email, password, name, device_id: getDeviceId() };
             
             const localRes = await fetch(API + endpoint, {
                 method: 'POST',
@@ -312,7 +328,7 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
                 console.warn("Firebase Auth failed, attempting local fallback:", fe);
                 // Graceful fallback to local Auth if Firebase has invalid credentials or configuration!
                 const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
-                const payload = authMode === 'login' ? { email, password } : { email, password, name };
+                const payload = authMode === 'login' ? { email, password } : { email, password, name, device_id: getDeviceId() };
                 
                 const localRes = await fetch(API + endpoint, {
                     method: 'POST',
@@ -328,6 +344,7 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
 
         setToken(res.token);
         currentUser = res.user;
+        setUserData(res.user);
         renderUser();
         closeModal('authModal');
         
@@ -1113,6 +1130,7 @@ document.getElementById('appForm').addEventListener('submit', async (e) => {
         pages: formPages.map(p => ({ id: p.id, name: p.name, elements: p.elements || [] })),
         collections: [],
         globalStates: [],
+        device_id: getDeviceId(),
         theme: {
             mode: 'light',
             primaryColor: document.getElementById('primaryColor').value,
@@ -1144,6 +1162,7 @@ document.getElementById('appForm').addEventListener('submit', async (e) => {
             const res = await api('POST', '/generate', data);
             newAppId = res.app_id;
         }
+        document.body.dispatchEvent(new Event('appsUpdated'));
         resetForm();
         switchView('apps');
         showSuccessModal(newAppId, editId ? 'App Updated!' : 'App Created!');
@@ -1194,53 +1213,6 @@ function cancelEdit() {
     switchView('apps');
 }
 window.cancelEdit = cancelEdit;
-
-// ── Apps List ──
-
-async function loadApps() {
-    const container = document.getElementById('appsList');
-    container.innerHTML = '<div class="loading"><span class="spinner"></span> Loading apps...</div>';
-    try {
-        const apps = await api('GET', '/apps');
-        if (!apps.length) {
-            container.innerHTML = '<div class="empty-state">' +
-                '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
-                '<h3>No apps yet</h3>' +
-                '<p>Create your first React Native app — we\'ll write the code for you.</p>' +
-                '<button class="btn btn-primary" onclick="switchView(\'create\')">+ Create Your First App</button>' +
-                '</div>';
-            return;
-        }
-        container.innerHTML = apps.map(a => renderAppCard(a)).join('');
-    } catch (err) {
-        container.innerHTML = '<div class="empty-state"><p style="color:var(--danger)">Failed to load: ' + err.message + '</p><button class="btn btn-secondary" onclick="loadApps()">Retry</button></div>';
-    }
-}
-
-function renderAppCard(a) {
-    const cfg = a.config || {};
-    const primary = cfg.primary_color || '#7c5cfc';
-
-    return '<div class="app-card" onclick="navigateToApp(\'' + a.id + '\')" style="--card-primary:' + primary + '">' +
-        '<div class="app-card-header">' +
-        '<div class="app-card-header-name">' + esc(cfg.display_name || cfg.app_name || a.app_name) + '</div>' +
-        '</div>' +
-        '<div class="app-card-body">' +
-        '<div class="app-card-meta">' +
-        '<span class="app-card-tag primary-tag">v' + esc(cfg.version || '1.0.0') + '</span>' +
-        '<span class="app-card-tag">' + esc(cfg.package_name || '') + '</span>' +
-        '</div>' +
-        '<div class="app-card-stats">' +
-        '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' + esc(cfg.package_name || '-') + '</span>' +
-        '<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + formatDate(a.created_at) + '</span>' +
-        '</div>' +
-        '</div>' +
-        '<div class="app-card-footer">' +
-        '<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openPreview(\'' + a.id + '\')">Preview</button>' +
-        '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();navigateToApp(\'' + a.id + '\')">Open</button>' +
-        '</div>' +
-        '</div>';
-}
 
 function esc(s) {
     const d = document.createElement('div');
@@ -1387,22 +1359,7 @@ async function editApp(appId) {
 }
 window.editApp = editApp;
 
-// ── Delete ──
-
-async function deleteApp(appId) {
-    try {
-        const app = await api('GET', '/apps/' + appId);
-        const name = (app.config || {}).display_name || app.app_name || appId;
-        const ok = await confirm('Delete App', 'Delete "' + name + '"? This will remove the source files. Build artifacts are preserved.');
-        if (!ok) return;
-        await api('DELETE', '/apps/' + appId);
-        toast('App deleted');
-        loadApps();
-    } catch (err) {
-        toast(err.message, 'error');
-    }
-}
-window.deleteApp = deleteApp;
+// ── Delete (HTMX Handled) ──
 
 // ── Build ──
 

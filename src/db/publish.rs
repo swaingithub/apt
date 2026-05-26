@@ -17,6 +17,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_current_config(&self, app_id: &str) -> SqlResult<Option<serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(

@@ -12,6 +12,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn list_generated_apps(&self, user_id: &str) -> SqlResult<Vec<serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -79,6 +80,15 @@ impl Database {
         Ok(affected > 0)
     }
 
+    pub fn update_app_config(&self, app_id: &str, config: &str) -> SqlResult<bool> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute(
+            "UPDATE generated_apps SET config = ?1 WHERE id = ?2",
+            params![config, app_id],
+        )?;
+        Ok(affected > 0)
+    }
+
     pub fn delete_generated_app(&self, app_id: &str) -> SqlResult<bool> {
         let conn = self.conn.lock().unwrap();
         let affected = conn.execute(
@@ -86,6 +96,17 @@ impl Database {
             params![app_id],
         )?;
         Ok(affected > 0)
+    }
+
+    pub fn migrate_anonymous_apps(&self, device_id: &str, new_user_id: &str) -> SqlResult<u32> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute(
+            "UPDATE generated_apps SET user_id = ?1
+             WHERE user_id = 'anonymous'
+             AND json_extract(config, '$.project_config.device_id') = ?2",
+            params![new_user_id, device_id],
+        )?;
+        Ok(affected as u32)
     }
 
     pub fn get_app_by_slug(&self, slug: &str) -> SqlResult<Option<serde_json::Value>> {

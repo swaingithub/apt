@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
+import { Alert, Linking, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
 import type { AppAction, Collection, ProjectConfig } from './types';
 import { resolveTheme, statusBarStyle } from './theme';
 import { renderElement, type RenderCtx } from './renderer';
+import { matchUrl, type RouteConfig } from './routing';
 
 interface AptAppProps {
   config: ProjectConfig;
+  routing?: RouteConfig;
+  onNavigateToPage?: (pageId: string) => void;
 }
 
-export default function AptApp({ config }: AptAppProps) {
+export default function AptApp({ config, routing, onNavigateToPage }: AptAppProps) {
   const [activePageId, setActivePageId] = useState(config.homePageId);
   const [collections, setCollections] = useState<Record<string, Collection>>(() =>
     Object.fromEntries(config.collections.map((c) => [c.name, c]))
@@ -16,6 +19,28 @@ export default function AptApp({ config }: AptAppProps) {
   const [stateValues, setStateValues] = useState<Record<string, any>>(() =>
     Object.fromEntries(config.globalStates.map((s) => [s.name, s.defaultValue]))
   );
+
+  const navigateToPage = useCallback((pageId: string) => {
+    setActivePageId(pageId);
+    onNavigateToPage?.(pageId);
+  }, [onNavigateToPage]);
+
+  // Deep link handler
+  useEffect(() => {
+    if (!routing) return;
+    const handleUrl = (url: string) => {
+      const matched = matchUrl(url, routing);
+      if (matched && config.pages.some((p) => p.id === matched.pageId)) {
+        navigateToPage(matched.pageId);
+      }
+    };
+    Linking.addEventListener('url', (event) => {
+      if (event.url) handleUrl(event.url);
+    });
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+  }, [routing, config.pages, navigateToPage]);
 
   const theme = resolveTheme(config.theme);
   const activePage = useMemo(
@@ -46,13 +71,13 @@ export default function AptApp({ config }: AptAppProps) {
 
   const onAction = useCallback((action?: AppAction, value?: any) => {
     if (!action || action.type === 'none') return;
-    if (action.type === 'navigate' && action.targetPage) setActivePageId(action.targetPage);
+    if (action.type === 'navigate' && action.targetPage) navigateToPage(action.targetPage);
     if (action.type === 'state' && action.stateKey) setStateValues((s) => ({ ...s, [action.stateKey!]: value }));
     if (action.type === 'toast' || action.type === 'modal') {
       const msg = interpolate(action.type === 'toast' ? action.toastText : action.modalContent);
       if (msg) Alert.alert(config.appName, msg);
     }
-  }, [interpolate, config.appName]);
+  }, [interpolate, config.appName, navigateToPage]);
 
   const onDelete = useCallback((collectionName: string, recordId: string) => {
     setCollections((cur) => {

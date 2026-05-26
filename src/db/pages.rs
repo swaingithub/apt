@@ -52,6 +52,7 @@ impl Database {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    #[allow(dead_code)]
     pub fn get_page_by_page_id(&self, app_id: &str, page_id: &str) -> SqlResult<Option<serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(

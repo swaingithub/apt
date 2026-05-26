@@ -30,6 +30,7 @@ impl Database {
         Ok(affected > 0)
     }
 
+    #[allow(dead_code)]
     pub fn get_build(&self, build_id: &str, user_id: &str) -> SqlResult<Option<serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(

@@ -1,9 +1,11 @@
 use handlebars::Handlebars;
 
+#[allow(dead_code)]
 pub struct TemplateEngine {
     handlebars: Handlebars<'static>,
 }
 
+#[allow(dead_code)]
 impl TemplateEngine {
     pub fn new() -> Self {
         let mut handlebars = Handlebars::new();
